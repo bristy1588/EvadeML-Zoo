@@ -34,14 +34,20 @@ class PGDModelWrapper:
 
         self.y_pred = tf.argmax(self.pre_softmax, 1)
 
+from datasets import MNISTDataset, CIFAR10Dataset, ImageNetDataset
+from utils.squeeze import get_squeezer_by_name
 
 def generate_pgdli_examples(sess, model, x, y, X, Y, attack_params, verbose, attack_log_fpath):
-    model_for_pgd = PGDModelWrapper(model, x, y)
-    params = {'model': model_for_pgd, 'epsilon': 0.3, 'k':40, 'a':0.01, 'random_start':True,
+    dataset = CIFAR10Dataset()
+    model_mine = dataset.load_model_by_name('carlini', logits=False, input_range_type=1,
+                                                    pre_filter=get_squeezer_by_name('median_filter_2_2', 'tensorflow'))
+    #model_mine = model
+    model_for_pgd = PGDModelWrapper(model_mine, x, y)
+    params = {'model': model_for_pgd, 'epsilon': 0.3, 'k': 20, 'a':0.01, 'random_start':True,
                      'loss_func':'xent' }
     params = override_params(params, attack_params)
     attack = LinfPGDAttack(**params)
-
+    print("BRISTY :: Params", params)
     Y_class = np.argmax(Y, 1)
     X_adv = attack.perturb(X, Y_class, sess)
     return X_adv

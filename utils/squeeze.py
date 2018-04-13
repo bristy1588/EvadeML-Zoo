@@ -285,11 +285,11 @@ def get_squeezer_by_name(name, func_type):
 
     raise Exception('Unknown squeezer name: %s' % name)
 
-def get_sequential_squeezers_by_name(squeezers_name):
+def get_sequential_squeezers_by_name(squeezers_name, func_type='python'):
     # example_squeezers_name = "binary_filter_0.5,median_smoothing_2_2"
     squeeze_func = None
     for squeezer_name in squeezers_name.split(','):
-        squeezer = get_squeezer_by_name(squeezer_name, 'python')
+        squeezer = get_squeezer_by_name(squeezer_name, func_type)
 
         if squeeze_func == None:
             squeeze_func = lambda x: squeezer(x)

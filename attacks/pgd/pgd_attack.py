@@ -11,11 +11,18 @@ import tensorflow as tf
 import numpy as np
 
 
+from utils.squeeze import get_squeezer_by_name
+from utils.median import median_filter as median_filter_tf
+from datasets import MNISTDataset, CIFAR10Dataset, ImageNetDataset
+
 class LinfPGDAttack:
+
   def __init__(self, model, epsilon, k, a, random_start, loss_func):
     """Attack parameter initialization. The attack performs k steps of
        size a, while always staying within epsilon from the initial
        point."""
+    ## Let us ignore the model here.
+
     self.model = model
     self.epsilon = epsilon
     self.k = k
@@ -23,7 +30,19 @@ class LinfPGDAttack:
     self.rand = random_start
 
     if loss_func == 'xent':
-      loss = model.xent
+      """
+      self.l2_x = tf.placeholder(tf.float32, (None, 32, 32, 3))
+      self.l2_orig = tf.placeholder(tf.float32, (None, 32, 32, 3))
+      reg_loss = 0
+      batch_size = 10
+      for i in range(batch_size):
+        normalized_l2_loss = tf.nn.l2_loss(self.l2_orig[i] - self.l2_x[i]) / tf.nn.l2_loss(self.l2_orig[i])
+        reg_loss += normalized_l2_loss
+
+      #self.loss = model.xent + reg_loss
+      """
+      self.loss = model.xent
+
     elif loss_func == 'cw':
       label_mask = tf.one_hot(model.y_input,
                               10,
@@ -32,31 +51,46 @@ class LinfPGDAttack:
                               dtype=tf.float32)
       correct_logit = tf.reduce_sum(label_mask * model.pre_softmax, axis=1)
       wrong_logit = tf.reduce_max((1-label_mask) * model.pre_softmax, axis=1)
-      loss = -tf.nn.relu(correct_logit - wrong_logit + 50)
+      self.loss = -tf.nn.relu(correct_logit - wrong_logit + 50)
     else:
       print('Unknown loss function. Defaulting to cross-entropy')
-      loss = model.xent
+      self.loss = model.xent
 
-    self.grad = tf.gradients(loss, model.x_input)[0]
+
+    self.grad = tf.gradients(self.loss, self.model.x_input)[0]
+
+  def defend(self, x):
+    sq = get_squeezer_by_name('bit_depth_5', 'python')
+    return sq(x)
 
   def perturb(self, x_nat, y, sess):
     """Given a set of examples (x_nat, y), returns a set of adversarial
        examples within epsilon of x_nat in l_infinity norm."""
+
     if self.rand:
-      x = x_nat + np.random.uniform(-self.epsilon, self.epsilon, x_nat.shape)
+      x = x_nat + np.random.uniform(self.epsilon, self.epsilon, x_nat.shape)
     else:
       x = np.copy(x_nat)
 
+    l_max = 0
+    x_max = 0
+
     for i in range(self.k):
-      grad = sess.run(self.grad, feed_dict={self.model.x_input: x,
+      #g_x = self.defend(x)
+      g_x = x
+      grad,  l = sess.run([self.grad, self.loss], feed_dict={self.model.x_input : g_x,
                                             self.model.y_input: y})
-
       x += self.a * np.sign(grad)
-
-      x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon) 
+      x = np.clip(x, x_nat -  self.epsilon, x_nat + self.epsilon)
       x = np.clip(x, 0, 1) # ensure valid pixel range
 
-    return x
+      if (l > l_max):
+        l_max = l
+        x_max = x
+
+      print("Itr: ", i, " Loss: ", l)
+
+    return x_max
 
 
 if __name__ == '__main__':

@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
+from scipy import ndimage
 
 import os
 import pdb
@@ -14,6 +15,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
+from utils.squeeze import get_squeezer_by_name
+
 
 FLAGS = flags.FLAGS
 
@@ -88,8 +91,13 @@ def main(argv=None):
         The scaling argument, 'input_range_type': {1: [0,1], 2:[-0.5, 0.5], 3:[-1, 1]...}
         """
         model = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1)
+        print("## Model Name:", FLAGS.model_name)
         model.compile(loss='categorical_crossentropy',optimizer='sgd', metrics=['acc'])
 
+
+    print("Bristy :: Starting with 3 times the Number of Examples Requested")
+    prelim_ids =  np.array(range(FLAGS.nb_examples * 3))
+    X_test_all, Y_test_all = X_test_all[prelim_ids], Y_test_all[prelim_ids]
 
     # 3. Evaluate the trained model.
     # TODO: add top-5 accuracy for ImageNet.

@@ -37,9 +37,9 @@ def carlini_model(input_shape, nb_filters, nb_denses, logits, input_range_type, 
         # The input data range is [-1, 1]. Convert to [-0.5,0.5] by x/2.
         scaler = lambda x: x/2
 
-    model.add(Lambda(scaler, input_shape=input_shape))
-    model.add(Lambda(pre_filter, output_shape=input_shape))
-
+    # Let's first add the prefilters
+    model.add(Lambda(pre_filter, input_shape=input_shape))
+    model.add(Lambda(scaler, output_shape=input_shape))
     model.add(Conv2D(nb_filters, (3, 3)))
     model.add(Activation('relu'))
     model.add(Conv2D(nb_filters, (3, 3)))
