@@ -53,7 +53,7 @@ class ImageNetDataset:
         # self.image_size = 224
         self.num_channels = 3
         self.num_classes = 1000
-        self.img_folder = "/tmp/ILSVRC2012_img_val_labeled_caffe"
+        self.img_folder = "/Users/nikhil/Desktop/featureSqueeze/datasets/imagenet_dataset/ILSVRC2012_img_val_labeled_caffe"
 
         if not os.path.isdir:
             raise Exception("Please prepare the ImageNet dataset first: EvadeML-Zoo/datasets/imagenet_dataset/label_as_filename.py.")

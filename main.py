@@ -2,7 +2,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
-from scipy import ndimage
 
 import os
 import pdb
@@ -15,8 +14,6 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.platform import app
 from tensorflow.python.platform import flags
-from utils.squeeze import get_squeezer_by_name
-
 
 FLAGS = flags.FLAGS
 
@@ -54,6 +51,8 @@ def load_tf_session():
 
 
 def main(argv=None):
+
+
     # 0. Select a dataset.
     from datasets import MNISTDataset, CIFAR10Dataset, ImageNetDataset
     from datasets import get_correct_prediction_idx, evaluate_adversarial_examples, calculate_mean_confidence, calculate_accuracy
@@ -91,13 +90,8 @@ def main(argv=None):
         The scaling argument, 'input_range_type': {1: [0,1], 2:[-0.5, 0.5], 3:[-1, 1]...}
         """
         model = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1)
-        print("## Model Name:", FLAGS.model_name)
         model.compile(loss='categorical_crossentropy',optimizer='sgd', metrics=['acc'])
 
-
-    print("Bristy :: Starting with 3 times the Number of Examples Requested")
-    prelim_ids =  np.array(range(FLAGS.nb_examples * 3))
-    X_test_all, Y_test_all = X_test_all[prelim_ids], Y_test_all[prelim_ids]
 
     # 3. Evaluate the trained model.
     # TODO: add top-5 accuracy for ImageNet.
@@ -261,7 +255,7 @@ def main(argv=None):
 
 
     from utils.output import write_to_csv
-    attacks_evaluation_csv_fpath = os.path.join(FLAGS.result_folder, 
+    attacks_evaluation_csv_fpath = os.path.join(FLAGS.result_folder,
             "%s_attacks_%s_evaluation.csv" % \
             (task_id, attack_string_hash))
     fieldnames = ['dataset_name', 'model_name', 'attack_string', 'duration_per_sample', 'discretization', 'success_rate', 'mean_confidence', 'mean_l2_dist', 'mean_li_dist', 'mean_l0_dist_value', 'mean_l0_dist_pixel']
@@ -299,7 +293,7 @@ def main(argv=None):
         result_folder_robustness = os.path.join(FLAGS.result_folder, "robustness")
         fname_prefix = "%s_%s_robustness" % (task_id, attack_string_hash)
         evaluate_robustness(FLAGS.robustness, model, Y_test_all, X_test_all, Y_test, \
-                attack_string_list, X_test_adv_discretized_list, 
+                attack_string_list, X_test_adv_discretized_list,
                 fname_prefix, selected_idx_vis, result_folder_robustness)
 
 
