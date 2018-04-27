@@ -1,3 +1,4 @@
+
 import warnings
 from .pgd_attack import LinfPGDAttack
 
@@ -36,11 +37,22 @@ class PGDModelWrapper:
 
 def generate_pgdli_examples(sess, model, x, y, X, Y, attack_params, verbose, attack_log_fpath):
     model_for_pgd = PGDModelWrapper(model, x, y)
-    params = {'model': model_for_pgd, 'epsilon': 0.3, 'k':40, 'a':0.01, 'random_start':True,
-                     'loss_func':'xent' }
+    params = {'model': model_for_pgd, 'epsilon': 0.3, 'k': 20, 'a':0.01, 'random_start':True,
+                     'loss_func':'xent'}
     params = override_params(params, attack_params)
     attack = LinfPGDAttack(**params)
+    print("BRISTY :: Params", params)
+    Y_class = np.argmax(Y, 1)
+    X_adv = attack.perturb(X, Y_class, sess)
+    return X_adv
 
+def bpda_generate_pgdli_examples(sess, model, x, y, X, Y, attack_params, verbose, attack_log_fpath, squeezer=lambda x:x):
+    model_for_pgd = PGDModelWrapper(model, x, y)
+    params = {'model': model_for_pgd, 'epsilon': 0.3, 'k': 20, 'a':0.01, 'random_start':True,
+                     'loss_func':'xent', 'squeezer' : squeezer }
+    params = override_params(params, attack_params)
+    attack = LinfPGDAttack(**params)
+    print("BRISTY :: Params", params)
     Y_class = np.argmax(Y, 1)
     X_adv = attack.perturb(X, Y_class, sess)
     return X_adv

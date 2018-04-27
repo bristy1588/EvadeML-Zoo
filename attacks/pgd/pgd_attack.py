@@ -12,7 +12,7 @@ import numpy as np
 
 
 class LinfPGDAttack:
-  def __init__(self, model, epsilon, k, a, random_start, loss_func):
+  def __init__(self, model, epsilon, k, a, random_start, loss_func, squeezer=lambda x:x):
     """Attack parameter initialization. The attack performs k steps of
        size a, while always staying within epsilon from the initial
        point."""
@@ -21,9 +21,9 @@ class LinfPGDAttack:
     self.k = k
     self.a = a
     self.rand = random_start
-
+    self.squeeze = squeezer     # Squeezer for BPDA
     if loss_func == 'xent':
-      loss = model.xent
+      self.loss = model.xent
     elif loss_func == 'cw':
       label_mask = tf.one_hot(model.y_input,
                               10,
@@ -32,12 +32,12 @@ class LinfPGDAttack:
                               dtype=tf.float32)
       correct_logit = tf.reduce_sum(label_mask * model.pre_softmax, axis=1)
       wrong_logit = tf.reduce_max((1-label_mask) * model.pre_softmax, axis=1)
-      loss = -tf.nn.relu(correct_logit - wrong_logit + 50)
+      self.loss = -tf.nn.relu(correct_logit - wrong_logit + 50)
     else:
       print('Unknown loss function. Defaulting to cross-entropy')
-      loss = model.xent
+      self.loss = model.xent
 
-    self.grad = tf.gradients(loss, model.x_input)[0]
+    self.grad = tf.gradients(self.loss, model.x_input)[0]
 
   def perturb(self, x_nat, y, sess):
     """Given a set of examples (x_nat, y), returns a set of adversarial
@@ -48,13 +48,15 @@ class LinfPGDAttack:
       x = np.copy(x_nat)
 
     for i in range(self.k):
-      grad = sess.run(self.grad, feed_dict={self.model.x_input: x,
+      g_x = self.squeeze(x)
+      grad, l = sess.run([self.grad, self.loss], feed_dict={self.model.x_input: g_x,
                                             self.model.y_input: y})
 
       x += self.a * np.sign(grad)
 
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
       x = np.clip(x, 0, 1) # ensure valid pixel range
+      print("Itr: ", i, " Loss: ", l)
 
     return x
 

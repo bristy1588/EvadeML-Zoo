@@ -5,7 +5,7 @@ from keras.layers import Input
 from keras.layers.convolutional import Conv2D, Conv2DTranspose, UpSampling2D
 from keras.regularizers import l2
 from keras.layers.normalization import BatchNormalization
-from keras.layers.core import Dense, Dropout, Activation, Reshape
+from keras.layers.core import Dense, Dropout, Activation, Reshape, Lambda
 from keras.layers.pooling import GlobalAveragePooling2D
 from keras.models import Model
 
@@ -68,9 +68,9 @@ def densenet_cifar10_model(logits=False, input_range_type=1, pre_filter=lambda x
         else:
             img_input = input_tensor
 
-    x = __create_dense_net(nb_classes, img_input, True, depth, nb_dense_block,
+    x = __create_dense_net(nb_classes, img_input, input_shape, True, depth, nb_dense_block,
                            growth_rate, nb_filter, -1, False, 0.0,
-                           dropout_rate, 1E-4, activation)
+                           dropout_rate, 1E-4, activation, pre_filter)
 
     # Ensure that the model takes into account
     # any potential predecessors of `input_tensor`.
@@ -84,9 +84,9 @@ def densenet_cifar10_model(logits=False, input_range_type=1, pre_filter=lambda x
 
 
 # Source: https://github.com/titu1994/DenseNet
-def __create_dense_net(nb_classes, img_input, include_top, depth=40, nb_dense_block=3, growth_rate=12, nb_filter=-1,
+def __create_dense_net(nb_classes, img_input, input_shape, include_top, depth=40, nb_dense_block=3, growth_rate=12, nb_filter=-1,
                        nb_layers_per_block=-1, bottleneck=False, reduction=0.0, dropout_rate=None, weight_decay=1E-4,
-                       activation='softmax'):
+                       activation='softmax',pre_filter=lambda x:x, ):
     ''' Build the DenseNet model
     Args:
         nb_classes: number of classes
@@ -145,8 +145,10 @@ def __create_dense_net(nb_classes, img_input, include_top, depth=40, nb_dense_bl
     compression = 1.0 - reduction
 
     # Initial convolution
+    x = Lambda(pre_filter, output_shape=input_shape)(img_input)
+    #x = img_input
     x = Conv2D(nb_filter, (3, 3), kernel_initializer='he_uniform', padding='same', name='initial_conv2D',
-               use_bias=False, kernel_regularizer=l2(weight_decay))(img_input)
+               use_bias=False, kernel_regularizer=l2(weight_decay))(x)
 
     # Add dense blocks
     for block_idx in range(nb_dense_block - 1):
