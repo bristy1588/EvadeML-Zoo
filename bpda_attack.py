@@ -2,6 +2,7 @@
     Technique  : BPDA from Anish et. al (https://arxiv.org/abs/1802.00420)
     Attack     : This attacks the robustness of Feature Squeezers as reported in Table 3 of Feature Squeezing Paper
                 (https://arxiv.org/pdf/1704.01155.pdf)
+    Since this is BPDA, we do not modify the model by itself, so vanilla model = augmented model
 
     Self: Notes:
         - Not much use attacking MNIST
@@ -101,6 +102,8 @@ def main(argv=None):
         """
         # Model considering Adaptive Attacks
         model = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1)
+        filter_model = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1,
+                                           pre_filter=get_squeezer_by_name(FLAGS.filter, 'tensorflow'))
         model.compile(loss='categorical_crossentropy',optimizer='sgd', metrics=['acc'])
 
     # Small Optimization for faster testing
@@ -255,7 +258,8 @@ def main(argv=None):
         dur_per_sample = duration / len(X_test_adv)
 
         # 5.0 Output predictions.
-        Y_test_adv_pred = model.predict(X_test_adv)
+        # Predict Using the Filter Model
+        Y_test_adv_pred = filter_model.predict(X_test_adv)
         predictions_fpath = os.path.join(predictions_folder, "%s.npy"% attack_string)
         np.save(predictions_fpath, Y_test_adv_pred, allow_pickle=False)
 

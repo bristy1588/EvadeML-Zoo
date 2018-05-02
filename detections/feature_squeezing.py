@@ -79,9 +79,11 @@ class FeatureSqueezingDetector:
 
         if params.has_key('threshold'):
             self.threshold = float(params['threshold'])
+            print(" ## Bristy :: Detector Threshold:", self.threshold)
         else:
             self.threshold = None
             self.train_fpr = float(params['fpr'])
+            print(" ## Bristy :: Detector False Positive Rate:", self.threshold)
 
     def get_squeezer_by_name(self, name):
         return get_squeezer_by_name(name, 'python')

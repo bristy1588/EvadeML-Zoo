@@ -103,7 +103,7 @@ class DetectionEvaluator:
 
         # 1. Split Train and Test 
         random.seed(1234)
-        length = len(X_detect)
+        length = len(X_detect)  # X_detect is [LEG, ADV]
         train_ratio = 0.5
         train_idx = random.sample(range(length), int(train_ratio*length))
         train_test_seq = [1 if idx in train_idx else 0 for idx in range(length) ]

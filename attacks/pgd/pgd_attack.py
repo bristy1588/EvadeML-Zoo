@@ -48,7 +48,7 @@ class LinfPGDAttack:
       x = np.copy(x_nat)
 
     for i in range(self.k):
-      g_x = self.squeeze(x)
+      g_x = self.squeeze(x)  # Performing BPDA here
       grad, l = sess.run([self.grad, self.loss], feed_dict={self.model.x_input: g_x,
                                             self.model.y_input: y})
 
