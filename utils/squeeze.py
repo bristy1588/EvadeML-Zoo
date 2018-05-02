@@ -279,7 +279,7 @@ def get_squeezer_by_name(name, func_type):
 
             # Return a list
             args = parse_params(params_str)
-            print ("params_str: %s, args: %s" % (params_str, args))
+            print (" ## BRISTY:: params_str: %s, args: %s" % (params_str, args))
 
             return lambda x: globals()[func_name](*([x]+args))
 
