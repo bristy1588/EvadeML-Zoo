@@ -10,7 +10,7 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 
-from datasets import calculate_accuracy
+from utils.squeeze import reduce_precision_py
 
 class LinfPGDAttack:
   def __init__(self, model, epsilon, k, a, random_start, loss_func, squeezer=lambda x:x, Y=None):
@@ -54,12 +54,13 @@ class LinfPGDAttack:
     max_acc = 0
     x_max = x
     for i in range(self.k):
-      g_x = self.squeeze(x)  # Performing BPDA here
-      grad, l, y_cur = sess.run([self.grad, self.loss, self.model.y_pred], feed_dict={self.model.x_input: g_x,
+      squeeze_x = self.squeeze(x)  # Performing BPDA here
+      p_x = reduce_precision_py(squeeze_x, 256) # Ultimately prediction is discretized.
+      grad, l, y_cur = sess.run([self.grad, self.loss, self.model.y_pred], feed_dict={self.model.x_input: p_x,
                                             self.model.y_input: y})
 
       x += self.a * np.sign(grad)
-      acc = 1 -  (np.sum(y_cur == self.Y) / float(len(self.Y)))
+      acc = 1.0 -  (np.sum(y_cur == self.Y) / float(len(self.Y)))
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
       x = np.clip(x, 0, 1) # ensure valid pixel range
       print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc)
