@@ -12,6 +12,69 @@ import numpy as np
 
 from utils.squeeze import reduce_precision_py
 
+# Optimizes for 3 models for now, could be extended into more.
+class CombinedLinfPGDAttack:
+  def __init__(self, model1, model2, model3, epsilon, k, a, random_start, loss_func, Y=None,
+               sq1 = lambda x:x, sq2 = lambda x:x, sq3 = lambda x:x ):
+    """Attack parameter initialization. The attack performs k steps of
+       size a, while always staying within epsilon from the initial
+       point.
+       This simulatenously runs the Combined Linf attack for 4 models
+       """
+    self.model1 = model1
+    self.model2 = model2
+    self.model3 = model3
+    self.epsilon = epsilon
+    self.k = k
+    self.a = a
+    self.Y = np.argmax(Y, axis = 1) # Target Labels
+    self.rand = random_start
+
+    self.sq1 = sq1
+    self.sq2 = sq2
+    self.sq3 = sq3
+    self.loss = model1.xent + model2.xent + model3.xent
+    # (TODO) Need to add an regularizaton of some sort.
+    if loss_func != 'xent':
+      print('Unknown loss function. Defaulting to cross-entropy')
+
+    self.grad = (tf.gradients(self.loss, model1.x_input)[0] + tf.gradients(self.loss, model2.x_input)[0] \
+                 + tf.gradients(self.loss, model3.x_input)[0])
+
+  def perturb(self, x_nat, y, sess):
+    """Given a set of examples (x_nat, y), returns a set of adversarial
+       examples within epsilon of x_nat in l_infinity norm."""
+    if self.rand:
+      x = x_nat + np.random.uniform(-self.epsilon, self.epsilon, x_nat.shape)
+    else:
+      x = np.copy(x_nat)
+
+    max_acc = 0
+    x_max = x
+    for i in range(self.k):
+      # Performing BPDA and EOT here
+      x1 = self.sq1(reduce_precision_py(x, 256))
+      x2 = self.sq2(reduce_precision_py(x, 256))
+      x3 = self.sq2(reduce_precision_py(x, 256))
+
+      grad, l, y_cur1, y_cur2, y_cur3 = sess.run([self.grad, self.loss, self.model1.y_pred, self.model2.y_pred,
+                                                  self.model3.y_pred], feed_dict={ self.model1.x_input: x1,
+                                                  self.model2.x_input: x2, self.model3.x_input: x3,
+                                                  self.model1.y_input: y, self.model2.y_input: y, self.model3.y_input: y })
+
+
+      x += self.a * np.sign(grad)
+      agg_acc = np.sum(y_cur1 == self.Y) + np.sum(y_cur2 == self.Y) + np.sum(y_cur3 == self.Y)
+      acc = 1 - agg_acc/(3.0 * float(len(self.Y)))
+      x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
+      x = np.clip(x, 0, 1) # ensure valid pixel range
+      print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc)
+      if acc  > max_acc:
+        max_acc = acc
+        x_max = x
+    return x_max
+
+
 class LinfPGDAttack:
   def __init__(self, model, epsilon, k, a, random_start, loss_func, squeezer=lambda x:x, Y=None):
     """Attack parameter initialization. The attack performs k steps of
@@ -23,7 +86,6 @@ class LinfPGDAttack:
     self.a = a
     self.Y = np.argmax(Y, axis = 1) # Target Labels
 
-    print(" Target Label Shape :: ", self.Y.shape )
     self.rand = random_start
     self.squeeze = squeezer     # Squeezer for BPDA
     if loss_func == 'xent':
@@ -54,8 +116,7 @@ class LinfPGDAttack:
     max_acc = 0
     x_max = x
     for i in range(self.k):
-      squeeze_x = self.squeeze(x)  # Performing BPDA here
-      p_x = reduce_precision_py(squeeze_x, 256) # Ultimately prediction is discretized.
+      p_x = self.squeeze(reduce_precision_py(x, 256))  # First Reduce precision, then squeeze
       grad, l, y_cur = sess.run([self.grad, self.loss, self.model.y_pred], feed_dict={self.model.x_input: p_x,
                                             self.model.y_input: y})
 
