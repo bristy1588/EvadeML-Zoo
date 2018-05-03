@@ -52,7 +52,6 @@ def bpda_generate_pgdli_examples(sess, model, x, y, X, Y, attack_params, verbose
                      'loss_func':'xent', 'squeezer' : squeezer, 'Y' : Y}
     params = override_params(params, attack_params)
     attack = LinfPGDAttack(**params)
-    print("BRISTY :: Params", params)
     Y_class = np.argmax(Y, 1)
     X_adv = attack.perturb(X, Y_class, sess)
     return X_adv

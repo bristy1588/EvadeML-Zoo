@@ -21,8 +21,8 @@ class LinfPGDAttack:
     self.epsilon = epsilon
     self.k = k
     self.a = a
-    self.Y = Y  # Target Labels
-    print(self.Y)
+    self.Y = np.argmax(Y, axis = 1) # Target Labels
+
     print(" Target Label Shape :: ", self.Y.shape )
     self.rand = random_start
     self.squeeze = squeezer     # Squeezer for BPDA
@@ -59,8 +59,7 @@ class LinfPGDAttack:
                                             self.model.y_input: y})
 
       x += self.a * np.sign(grad)
-      print(" Pred Label Shape :: ", self.model.y_pred )
-      acc = 1 -  (np.sum(self.model.y_pred == self.Y) / float(len(self.Y)))
+      acc = 1 -  (np.sum(y_cur == self.Y) / float(len(self.Y)))
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
       x = np.clip(x, 0, 1) # ensure valid pixel range
       print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc)
