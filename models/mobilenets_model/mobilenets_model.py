@@ -198,10 +198,11 @@ def MobileNets(input_shape=None, alpha=1.0, depth_multiplier=1,
             img_input = input_tensor
 
     # Scaling
+    # The filter is applied before Scaling
+    x = Lambda(pre_filter, output_shape=input_shape)(img_input)
     # x = __create_mobilenet(classes, img_input, include_top, alpha, depth_multiplier, dropout, pooling, logits)
-    x = Lambda(lambda x: scaling_tf(x, input_range_type))(img_input)
-    # [NOTE] : here the filter is applied after lambda is Scaled
-    x = Lambda(pre_filter, output_shape=input_shape)(x)
+    x = Lambda(lambda x: scaling_tf(x, input_range_type))(x)
+
     x = __create_mobilenet(classes, x, include_top, alpha, depth_multiplier, dropout, pooling, logits)
 
     # Ensure that the model takes into account

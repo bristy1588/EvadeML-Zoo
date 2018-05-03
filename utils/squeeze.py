@@ -276,10 +276,8 @@ def get_squeezer_by_name(name, func_type):
         if name.startswith(squeezer_name):
             func_name = "%s_py" % squeezer_name if func_type=='python' else "%s_tf" % squeezer_name
             params_str = name[len(squeezer_name):]
-
             # Return a list
             args = parse_params(params_str)
-            print (" ## BRISTY:: params_str: %s, args: %s" % (params_str, args))
 
             return lambda x: globals()[func_name](*([x]+args))
 

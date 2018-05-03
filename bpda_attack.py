@@ -50,6 +50,10 @@ flags.DEFINE_string('filter', '', 'Supported: bit_depth')
 flags.DEFINE_string('result_folder', "results", 'The output folder for results.')
 flags.DEFINE_boolean('verbose', False, 'Stdout level. The hidden content will be saved to log files anyway.')
 
+flags.DEFINE_string('detection', '', 'Supported: feature_squeezing.')
+flags.DEFINE_boolean('detection_train_test_mode', True, 'Split into train/test datasets.')
+
+
 FLAGS.model_name = FLAGS.model_name.lower()
 
 def load_tf_session():
@@ -93,7 +97,7 @@ def main(argv=None):
     # Define input TF placeholder
     x = tf.placeholder(tf.float32, shape=(None, dataset.image_size, dataset.image_size, dataset.num_channels))
     y = tf.placeholder(tf.float32, shape=(None, dataset.num_classes))
-
+    sq = get_squeezer_by_name(FLAGS.filter, 'python')
 
     with tf.variable_scope(FLAGS.model_name):
         """
@@ -102,8 +106,6 @@ def main(argv=None):
         """
         # Model considering Adaptive Attacks
         model = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1)
-        filter_model = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1,
-                                           pre_filter=get_squeezer_by_name(FLAGS.filter, 'tensorflow'))
         model.compile(loss='categorical_crossentropy',optimizer='sgd', metrics=['acc'])
 
     # Small Optimization for faster testing
@@ -242,7 +244,7 @@ def main(argv=None):
         X_test_adv, aux_info = maybe_bpda_generate_adv_examples(sess, model, x, y, X_test, Y_test_target, attack_name,
                                                            attack_params, use_cache = x_adv_fpath,
                                                            verbose=FLAGS.verbose, attack_log_fpath=attack_log_fpath,
-                                                           squeezer=get_squeezer_by_name(FLAGS.filter, 'python'))
+                                                           squeezer= sq)
 
         if FLAGS.clip > 0:
             # This is L-inf clipping.
@@ -258,8 +260,8 @@ def main(argv=None):
         dur_per_sample = duration / len(X_test_adv)
 
         # 5.0 Output predictions.
-        # Predict Using the Filter Model
-        Y_test_adv_pred = filter_model.predict(X_test_adv)
+        # Squeezing the examples before the prediction
+        Y_test_adv_pred = model.predict(sq(X_test_adv))
         predictions_fpath = os.path.join(predictions_folder, "%s.npy"% attack_string)
         np.save(predictions_fpath, Y_test_adv_pred, allow_pickle=False)
 
@@ -268,7 +270,7 @@ def main(argv=None):
         # All data should be discretized to uint8.
         X_test_adv_discret = reduce_precision_py(X_test_adv, 256)
         X_test_adv_discretized_list.append(X_test_adv_discret)
-        Y_test_adv_discret_pred = model.predict(X_test_adv_discret)
+        Y_test_adv_discret_pred = model.predict(sq(X_test_adv_discret)) # Squeezing the models before prediction
         Y_test_adv_discretized_pred_list.append(Y_test_adv_discret_pred)
 
         rec = evaluate_adversarial_examples(X_test, Y_test, X_test_adv_discret, Y_test_target.copy(), targeted, Y_test_adv_discret_pred)
@@ -318,6 +320,21 @@ def main(argv=None):
         evaluate_robustness(FLAGS.robustness, model, Y_test_all, X_test_all, Y_test, \
                             attack_string_list, X_test_adv_discretized_list,
                             fname_prefix, selected_idx_vis, result_folder_robustness)
+
+        # 7. Detection experiment.
+        # Example: --detection "FeatureSqueezing?distance_measure=l1&squeezers=median_smoothing_2,bit_depth_4,bilateral_filter_15_15_60;"
+    if FLAGS.detection != '':
+        from detections.base import DetectionEvaluator
+
+        result_folder_detection = os.path.join(FLAGS.result_folder, "detection")
+        csv_fname = "%s_attacks_%s_detection.csv" % (task_id, attack_string_hash)
+        de = DetectionEvaluator(model, result_folder_detection, csv_fname, FLAGS.dataset_name)
+        Y_test_all_pred = model.predict(X_test_all)
+        de.build_detection_dataset(X_test_all, Y_test_all, Y_test_all_pred, selected_idx,
+                                   X_test_adv_discretized_list, Y_test_adv_discretized_pred_list,
+                                   attack_string_list, attack_string_hash, FLAGS.clip,
+                                   Y_test_target_next, Y_test_target_ll)
+        de.evaluate_detections(FLAGS.detection)
 
 
 if __name__ == '__main__':

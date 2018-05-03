@@ -10,9 +10,10 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 
+from datasets import calculate_accuracy
 
 class LinfPGDAttack:
-  def __init__(self, model, epsilon, k, a, random_start, loss_func, squeezer=lambda x:x):
+  def __init__(self, model, epsilon, k, a, random_start, loss_func, squeezer=lambda x:x, Y=None):
     """Attack parameter initialization. The attack performs k steps of
        size a, while always staying within epsilon from the initial
        point."""
@@ -20,6 +21,9 @@ class LinfPGDAttack:
     self.epsilon = epsilon
     self.k = k
     self.a = a
+    self.Y = Y  # Target Labels
+    print(self.Y)
+    print(" Target Label Shape :: ", self.Y.shape )
     self.rand = random_start
     self.squeeze = squeezer     # Squeezer for BPDA
     if loss_func == 'xent':
@@ -47,18 +51,23 @@ class LinfPGDAttack:
     else:
       x = np.copy(x_nat)
 
+    max_acc = 0
+    x_max = x
     for i in range(self.k):
       g_x = self.squeeze(x)  # Performing BPDA here
-      grad, l = sess.run([self.grad, self.loss], feed_dict={self.model.x_input: g_x,
+      grad, l, y_cur = sess.run([self.grad, self.loss, self.model.y_pred], feed_dict={self.model.x_input: g_x,
                                             self.model.y_input: y})
 
       x += self.a * np.sign(grad)
-
+      print(" Pred Label Shape :: ", self.model.y_pred )
+      acc = 1 -  (np.sum(self.model.y_pred == self.Y) / float(len(self.Y)))
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
       x = np.clip(x, 0, 1) # ensure valid pixel range
-      print("Itr: ", i, " Loss: ", l)
-
-    return x
+      print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc)
+      if acc  > max_acc:
+        max_acc = acc
+        x_max = x
+    return x_max
 
 
 if __name__ == '__main__':

@@ -48,8 +48,8 @@ def generate_pgdli_examples(sess, model, x, y, X, Y, attack_params, verbose, att
 
 def bpda_generate_pgdli_examples(sess, model, x, y, X, Y, attack_params, verbose, attack_log_fpath, squeezer=lambda x:x):
     model_for_pgd = PGDModelWrapper(model, x, y)
-    params = {'model': model_for_pgd, 'epsilon': 0.3, 'k': 20, 'a':0.01, 'random_start':True,
-                     'loss_func':'xent', 'squeezer' : squeezer }
+    params = {'model': model_for_pgd, 'epsilon': 0.3, 'k': 40, 'a':0.01, 'random_start':True,
+                     'loss_func':'xent', 'squeezer' : squeezer, 'Y' : Y}
     params = override_params(params, attack_params)
     attack = LinfPGDAttack(**params)
     print("BRISTY :: Params", params)
