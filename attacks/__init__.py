@@ -11,7 +11,7 @@ from .cleverhans_wrapper import generate_fgsm_examples, generate_jsma_examples, 
 from .carlini_wrapper import generate_carlini_l2_examples, generate_carlini_li_examples, generate_carlini_l0_examples
 from .deepfool_wrapper import generate_deepfool_examples, generate_universal_perturbation_examples
 from .adaptive.adaptive_adversary import generate_adaptive_carlini_l2_examples
-from .pgd.pgd_wrapper import generate_pgdli_examples, bpda_generate_pgdli_examples
+from .pgd.pgd_wrapper import generate_pgdli_examples, bpda_generate_pgdli_examples, combined_generate_pgdli_examples
 
 
 # TODO: replace pickle with .h5 for Python 2/3 compatibility issue.
@@ -25,6 +25,32 @@ def maybe_generate_adv_examples(sess, model, x, y, X, Y, attack_name, attack_par
         time_start = time.time()
         X_adv = generate_adv_examples(sess, model, x, y, X, Y, attack_name, attack_params,
                                       verbose, attack_log_fpath)
+        duration = time.time() - time_start
+
+        if not isinstance(X_adv, np.ndarray):
+            X_adv, aux_info = X_adv
+        else:
+            aux_info = {}
+
+        aux_info['duration'] = duration
+
+        if use_cache:
+            pickle.dump((X_adv, aux_info), open(x_adv_fpath, 'wb'))
+    return X_adv, duration
+
+
+
+def maybe_combined_generate_pgdli_examples(sess, model1, model2, model3,  x, y, X, Y, attack_params,
+                                           use_cache=False, verbose=True, attack_log_fpath=None, sq1=lambda x:x,
+                                           sq2=lambda x:x, sq3=lambda x:x ):
+    x_adv_fpath = use_cache
+    if use_cache and os.path.isfile(x_adv_fpath):
+        print ("Loading adversarial examples from [%s]." % os.path.basename(x_adv_fpath))
+        X_adv, duration = pickle.load(open(x_adv_fpath, "rb"))
+    else:
+        time_start = time.time()
+        X_adv = combined_generate_pgdli_examples(sess, model1, model2, model3,  x, y, X, Y, attack_params,
+                                                 verbose, attack_log_fpath,sq1, sq2, sq3)
         duration = time.time() - time_start
 
         if not isinstance(X_adv, np.ndarray):

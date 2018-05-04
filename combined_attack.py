@@ -1,15 +1,5 @@
 """
-    Technique  : Total Backpropagation through Filters
-    Attack     : This attacks the robustness of Feature Squeezers as reported in Table 3 of Feature Squeezing Paper
-                (https://arxiv.org/pdf/1704.01155.pdf)
-
-    Self: Notes:
-        - Not much use attacking MNIST
-        - CIFAR:     Carlini --- Supposets Carlini and Densenet
-        - Imagenet : MobileNet
-        - All attacks supported (since total differentiation)
-
-Okay, simplified interface. Now attack model will only be used for geenerating adversarial examples.
+    Combined attack using Linf Model
 """
 
 from __future__ import absolute_import
@@ -48,9 +38,17 @@ flags.DEFINE_boolean('visualize', True, 'Output the image examples for each atta
 
 flags.DEFINE_string('robustness', '', 'Supported: FeatureSqueezing.')
 
-flags.DEFINE_string('filter', '', 'Supported: median_3_3, median_2_2, non_local_means_color_11_3_4')
+
+flags.DEFINE_string('bit_depth_filter', '', 'Supported: bit_depth')
+flags.DEFINE_string('median_filter', '', "Supported:")
+flags.DEFINE_string('non_local_filter', '', "Supported:")
+
 flags.DEFINE_string('result_folder', "results", 'The output folder for results.')
 flags.DEFINE_boolean('verbose', False, 'Stdout level. The hidden content will be saved to log files anyway.')
+
+flags.DEFINE_string('detection', '', 'Supported: feature_squeezing.')
+flags.DEFINE_boolean('detection_train_test_mode', True, 'Split into train/test datasets.')
+
 
 FLAGS.model_name = FLAGS.model_name.lower()
 
@@ -95,6 +93,9 @@ def main(argv=None):
     # Define input TF placeholder
     x = tf.placeholder(tf.float32, shape=(None, dataset.image_size, dataset.image_size, dataset.num_channels))
     y = tf.placeholder(tf.float32, shape=(None, dataset.num_classes))
+    sq_bit_depth =get_squeezer_by_name(FLAGS.bit_depth_filter, 'python')
+    sq_median = lambda x : x   # Because the model compensates for this
+    sq_non_local = get_squeezer_by_name(FLAGS.non_local_filter , 'python')
 
 
     with tf.variable_scope(FLAGS.model_name):
@@ -103,9 +104,9 @@ def main(argv=None):
         The scaling argument, 'input_range_type': {1: [0,1], 2:[-0.5, 0.5], 3:[-1, 1]...}
         """
         # Model considering Adaptive Attacks
-        attack_model = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1,
-                                           pre_filter=get_squeezer_by_name(FLAGS.filter, 'tensorflow'))
         model = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1)
+        model_median = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1,
+                                           pre_filter = get_squeezer_by_name(FLAGS.median_filter, 'tensorflow'))
         model.compile(loss='categorical_crossentropy',optimizer='sgd', metrics=['acc'])
 
     # Small Optimization for faster testing
@@ -183,7 +184,7 @@ def main(argv=None):
 
 
     # 5. Generate adversarial examples.
-    from attacks import maybe_generate_adv_examples
+    from attacks import maybe_combined_generate_pgdli_examples
     from utils.squeeze import reduce_precision_py
     from utils.parameter_parser import parse_params
     attack_string_hash = hashlib.sha1(FLAGS.attacks.encode('utf-8')).hexdigest()[:5]
@@ -239,10 +240,12 @@ def main(argv=None):
         x_adv_fname = "%s_%s.pickle" % (task_id, attack_string)
         x_adv_fpath = os.path.join(X_adv_cache_folder, x_adv_fname)
 
-        #
-        X_test_adv, aux_info = maybe_generate_adv_examples(sess, attack_model, x, y, X_test, Y_test_target, attack_name,
-                                                           attack_params, use_cache = x_adv_fpath,
-                                                           verbose=FLAGS.verbose, attack_log_fpath=attack_log_fpath)
+        # Note that we use the attack model here instead of the vanilla model
+        # Note that we pass in the Squeezer function for BPDA
+        X_test_adv, aux_info = maybe_combined_generate_pgdli_examples(sess, model, model_median, model, x, y, X_test,
+                                    Y_test_target, attack_params, use_cache = x_adv_fpath,
+                                    verbose=FLAGS.verbose, attack_log_fpath=attack_log_fpath, sq1 = sq_bit_depth,
+                                    sq2 = sq_median, sq3 = sq_non_local)
 
         if FLAGS.clip > 0:
             # This is L-inf clipping.
@@ -259,18 +262,20 @@ def main(argv=None):
 
         # 5.0 Output predictions.
         Y_test_adv_pred = model.predict(X_test_adv)
-        predictions_fpath = os.path.join(predictions_folder, "%s.npy"% attack_string)
+        predictions_fpath = os.path.join(predictions_folder, "%s.npy" % attack_string)
         np.save(predictions_fpath, Y_test_adv_pred, allow_pickle=False)
 
         # 5.1 Evaluate the adversarial examples being discretized to uint8.
-        print ("\n---Attack (uint8): %s" % attack_string)
+        print("\n---Attack (uint8): %s" % attack_string)
         # All data should be discretized to uint8.
         X_test_adv_discret = reduce_precision_py(X_test_adv, 256)
         X_test_adv_discretized_list.append(X_test_adv_discret)
         Y_test_adv_discret_pred = model.predict(X_test_adv_discret)
         Y_test_adv_discretized_pred_list.append(Y_test_adv_discret_pred)
 
-        rec = evaluate_adversarial_examples(X_test, Y_test, X_test_adv_discret, Y_test_target.copy(), targeted, Y_test_adv_discret_pred)
+        # Y_test_adv_discret_pred is for the vanilla model
+        rec = evaluate_adversarial_examples(X_test, Y_test, X_test_adv_discret, Y_test_target.copy(), targeted,
+                                            Y_test_adv_discret_pred)
         rec['dataset_name'] = FLAGS.dataset_name
         rec['model_name'] = FLAGS.model_name
         rec['attack_string'] = attack_string
@@ -278,14 +283,14 @@ def main(argv=None):
         rec['discretization'] = True
         to_csv.append(rec)
 
-
     from utils.output import write_to_csv
     attacks_evaluation_csv_fpath = os.path.join(FLAGS.result_folder,
-            "%s_attacks_%s_evaluation.csv" % \
-            (task_id, attack_string_hash))
-    fieldnames = ['dataset_name', 'model_name', 'attack_string', 'duration_per_sample', 'discretization', 'success_rate', 'mean_confidence', 'mean_l2_dist', 'mean_li_dist', 'mean_l0_dist_value', 'mean_l0_dist_pixel']
+                                                "%s_attacks_%s_evaluation.csv" % \
+                                                (task_id, attack_string_hash))
+    fieldnames = ['dataset_name', 'model_name', 'attack_string', 'duration_per_sample', 'discretization',
+                  'success_rate', 'mean_confidence', 'mean_l2_dist', 'mean_li_dist', 'mean_l0_dist_value',
+                  'mean_l0_dist_pixel']
     write_to_csv(to_csv, attacks_evaluation_csv_fpath, fieldnames)
-
 
     if FLAGS.visualize is True:
         from datasets.visualization import show_imgs_in_rows
@@ -297,15 +302,17 @@ def main(argv=None):
         legitimate_examples = X_test[selected_idx_vis]
 
         rows = [legitimate_examples]
-        rows += map(lambda x:x[selected_idx_vis], X_test_adv_list)
+        rows += map(lambda x: x[selected_idx_vis], X_test_adv_list)
 
-        img_fpath = os.path.join(FLAGS.result_folder, '%s_attacks_%s_examples.png' % (task_id, attack_string_hash) )
+        img_fpath = os.path.join(FLAGS.result_folder, '%s_attacks_%s_examples.png' % (task_id, attack_string_hash))
         show_imgs_in_rows(rows, img_fpath)
-        print ('\n===Adversarial image examples are saved in ', img_fpath)
+        print('\n===Adversarial image examples are saved in ', img_fpath)
 
-        # 6. Evaluate robust classification techniques.
-        # Example: --robustness \
-        #           "Base;FeatureSqueezing?squeezer=bit_depth_1;FeatureSqueezing?squeezer=median_filter_2;"
+        # TODO: output the prediction and confidence for each example, both legitimate and adversarial.
+
+    # 6. Evaluate robust classification techniques.
+    # Example: --robustness \
+    #           "Base;FeatureSqueezing?squeezer=bit_depth_1;FeatureSqueezing?squeezer=median_filter_2;"
     if FLAGS.robustness != '':
         """
         Test the accuracy with robust classifiers.
@@ -317,6 +324,21 @@ def main(argv=None):
         evaluate_robustness(FLAGS.robustness, model, Y_test_all, X_test_all, Y_test, \
                             attack_string_list, X_test_adv_discretized_list,
                             fname_prefix, selected_idx_vis, result_folder_robustness)
+
+    # 7. Detection experiment.
+    # Example: --detection "FeatureSqueezing?distance_measure=l1&squeezers=median_smoothing_2,bit_depth_4,bilateral_filter_15_15_60;"
+    if FLAGS.detection != '':
+        from detections.base import DetectionEvaluator
+
+        result_folder_detection = os.path.join(FLAGS.result_folder, "detection")
+        csv_fname = "%s_attacks_%s_detection.csv" % (task_id, attack_string_hash)
+        de = DetectionEvaluator(model, result_folder_detection, csv_fname, FLAGS.dataset_name)
+        Y_test_all_pred = model.predict(X_test_all)
+        de.build_detection_dataset(X_test_all, Y_test_all, Y_test_all_pred, selected_idx,
+                                   X_test_adv_discretized_list, Y_test_adv_discretized_pred_list,
+                                   attack_string_list, attack_string_hash, FLAGS.clip,
+                                   Y_test_target_next, Y_test_target_ll)
+        de.evaluate_detections(FLAGS.detection)
 
 
 if __name__ == '__main__':

@@ -260,20 +260,21 @@ def main(argv=None):
         dur_per_sample = duration / len(X_test_adv)
 
         # 5.0 Output predictions.
-        # Squeezing the examples before the prediction
-        Y_test_adv_pred = model.predict(sq(X_test_adv))
-        predictions_fpath = os.path.join(predictions_folder, "%s.npy"% attack_string)
+        Y_test_adv_pred = model.predict(X_test_adv)
+        predictions_fpath = os.path.join(predictions_folder, "%s.npy" % attack_string)
         np.save(predictions_fpath, Y_test_adv_pred, allow_pickle=False)
 
         # 5.1 Evaluate the adversarial examples being discretized to uint8.
-        print ("\n---Attack (uint8): %s" % attack_string)
+        print("\n---Attack (uint8): %s" % attack_string)
         # All data should be discretized to uint8.
         X_test_adv_discret = reduce_precision_py(X_test_adv, 256)
         X_test_adv_discretized_list.append(X_test_adv_discret)
-        Y_test_adv_discret_pred = model.predict(sq(X_test_adv_discret)) # Squeezing the models before prediction
+        Y_test_adv_discret_pred = model.predict(X_test_adv_discret)
         Y_test_adv_discretized_pred_list.append(Y_test_adv_discret_pred)
 
-        rec = evaluate_adversarial_examples(X_test, Y_test, X_test_adv_discret, Y_test_target.copy(), targeted, Y_test_adv_discret_pred)
+        # Y_test_adv_discret_pred is for the vanilla model
+        rec = evaluate_adversarial_examples(X_test, Y_test, X_test_adv_discret, Y_test_target.copy(), targeted,
+                                            Y_test_adv_discret_pred)
         rec['dataset_name'] = FLAGS.dataset_name
         rec['model_name'] = FLAGS.model_name
         rec['attack_string'] = attack_string
@@ -283,15 +284,17 @@ def main(argv=None):
 
 
     from utils.output import write_to_csv
-    attacks_evaluation_csv_fpath = os.path.join(FLAGS.result_folder,
-            "%s_attacks_%s_evaluation.csv" % \
-            (task_id, attack_string_hash))
-    fieldnames = ['dataset_name', 'model_name', 'attack_string', 'duration_per_sample', 'discretization', 'success_rate', 'mean_confidence', 'mean_l2_dist', 'mean_li_dist', 'mean_l0_dist_value', 'mean_l0_dist_pixel']
-    write_to_csv(to_csv, attacks_evaluation_csv_fpath, fieldnames)
 
+    attacks_evaluation_csv_fpath = os.path.join(FLAGS.result_folder,
+                                                "%s_attacks_%s_evaluation.csv" % \
+                                                (task_id, attack_string_hash))
+    fieldnames = ['dataset_name', 'model_name', 'attack_string', 'duration_per_sample', 'discretization', 'success_rate',
+                  'mean_confidence', 'mean_l2_dist', 'mean_li_dist', 'mean_l0_dist_value', 'mean_l0_dist_pixel']
+    write_to_csv(to_csv, attacks_evaluation_csv_fpath, fieldnames)
 
     if FLAGS.visualize is True:
         from datasets.visualization import show_imgs_in_rows
+
         if FLAGS.test_mode or FLAGS.balance_sampling:
             selected_idx_vis = range(Y_test.shape[1])
         else:
@@ -300,29 +303,32 @@ def main(argv=None):
         legitimate_examples = X_test[selected_idx_vis]
 
         rows = [legitimate_examples]
-        rows += map(lambda x:x[selected_idx_vis], X_test_adv_list)
+        rows += map(lambda x: x[selected_idx_vis], X_test_adv_list)
 
-        img_fpath = os.path.join(FLAGS.result_folder, '%s_attacks_%s_examples.png' % (task_id, attack_string_hash) )
+        img_fpath = os.path.join(FLAGS.result_folder, '%s_attacks_%s_examples.png' % (task_id, attack_string_hash))
         show_imgs_in_rows(rows, img_fpath)
-        print ('\n===Adversarial image examples are saved in ', img_fpath)
+        print('\n===Adversarial image examples are saved in ', img_fpath)
 
-        # 6. Evaluate robust classification techniques.
-        # Example: --robustness \
-        #           "Base;FeatureSqueezing?squeezer=bit_depth_1;FeatureSqueezing?squeezer=median_filter_2;"
+        # TODO: output the prediction and confidence for each example, both legitimate and adversarial.
+
+    # 6. Evaluate robust classification techniques.
+    # Example: --robustness \
+    #           "Base;FeatureSqueezing?squeezer=bit_depth_1;FeatureSqueezing?squeezer=median_filter_2;"
     if FLAGS.robustness != '':
         """
         Test the accuracy with robust classifiers.
         Evaluate the accuracy on all the legitimate examples.
         """
         from robustness import evaluate_robustness
+
         result_folder_robustness = os.path.join(FLAGS.result_folder, "robustness")
         fname_prefix = "%s_%s_robustness" % (task_id, attack_string_hash)
         evaluate_robustness(FLAGS.robustness, model, Y_test_all, X_test_all, Y_test, \
                             attack_string_list, X_test_adv_discretized_list,
                             fname_prefix, selected_idx_vis, result_folder_robustness)
 
-        # 7. Detection experiment.
-        # Example: --detection "FeatureSqueezing?distance_measure=l1&squeezers=median_smoothing_2,bit_depth_4,bilateral_filter_15_15_60;"
+    # 7. Detection experiment.
+    # Example: --detection "FeatureSqueezing?distance_measure=l1&squeezers=median_smoothing_2,bit_depth_4,bilateral_filter_15_15_60;"
     if FLAGS.detection != '':
         from detections.base import DetectionEvaluator
 

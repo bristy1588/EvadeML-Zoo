@@ -246,6 +246,7 @@ class DetectionEvaluator:
 
         for detector_name in detector_names:
             detector = self.get_detector_by_name(detector_name)
+            print( "Detector Name: ", detector)
             if detector is None:
                 print ("Skipped an unknown detector [%s]" % detector_name.split('?')[0])
                 continue
@@ -310,8 +311,10 @@ class DetectionEvaluator:
                 X_fae, Y_fae = self.get_fae_testing_data()
             else:
                 X_fae, Y_fae = self.get_fae_data()
-            Y_test_pred, Y_test_pred_score = detector.test(X_fae)
-            _, tpr, _, tp, ap = evalulate_detection_test(Y_fae, Y_test_pred)
-            print ("Overall detection rate on FAEs: %.4f \t %3d/%3d" % (tpr, tp, ap))
+            if X_fae != None:
+                print(" X Fae Shape: ", X_fae.shape)
+                Y_test_pred, Y_test_pred_score = detector.test(X_fae)
+                _, tpr, _, tp, ap = evalulate_detection_test(Y_fae, Y_test_pred)
+                print ("Overall detection rate on FAEs: %.4f \t %3d/%3d" % (tpr, tp, ap))
 
         write_to_csv(to_csv, csv_fpath, fieldnames)

@@ -1,6 +1,6 @@
 
 import warnings
-from .pgd_attack import LinfPGDAttack
+from .pgd_attack import LinfPGDAttack, CombinedLinfPGDAttack
 
 from keras.models import Model
 import tensorflow as tf
@@ -35,6 +35,7 @@ class PGDModelWrapper:
         self.y_pred = tf.argmax(self.pre_softmax, 1)
 
 
+
 def generate_pgdli_examples(sess, model, x, y, X, Y, attack_params, verbose, attack_log_fpath):
     model_for_pgd = PGDModelWrapper(model, x, y)
     params = {'model': model_for_pgd, 'epsilon': 0.3, 'k': 20, 'a':0.01, 'random_start':True,
@@ -52,6 +53,20 @@ def bpda_generate_pgdli_examples(sess, model, x, y, X, Y, attack_params, verbose
                      'loss_func':'xent', 'squeezer' : squeezer, 'Y' : Y}
     params = override_params(params, attack_params)
     attack = LinfPGDAttack(**params)
+    Y_class = np.argmax(Y, 1)
+    X_adv = attack.perturb(X, Y_class, sess)
+    return X_adv
+
+def combined_generate_pgdli_examples(sess, model1, model2, model3,  x, y, X, Y, attack_params, verbose, attack_log_fpath,
+                                     sq1=lambda x:x, sq2=lambda x:x, sq3=lambda x:x ):
+    model_1_for_pgd = PGDModelWrapper(model1, x, y)
+    model_2_for_pgd = PGDModelWrapper(model2, x, y)
+    model_3_for_pgd = PGDModelWrapper(model3, x, y)
+
+    params = {'model1': model_1_for_pgd,  'model2': model_2_for_pgd,'model3': model_3_for_pgd, 'epsilon': 0.3,
+              'k': 40, 'a': 0.01, 'random_start': True,'loss_func': 'xent', 'sq1': sq1, 'sq2': sq2, 'sq3': sq3, 'Y': Y}
+    params = override_params(params, attack_params)
+    attack = CombinedLinfPGDAttack(**params)
     Y_class = np.argmax(Y, 1)
     X_adv = attack.perturb(X, Y_class, sess)
     return X_adv

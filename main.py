@@ -92,6 +92,10 @@ def main(argv=None):
         model = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1)
         model.compile(loss='categorical_crossentropy',optimizer='sgd', metrics=['acc'])
 
+        # Small Optimization for faster testing
+    if FLAGS.dataset_name != "ImageNet":
+        prelim_ids = np.array(range(FLAGS.nb_examples * 4))
+        X_test_all, Y_test_all = X_test_all[prelim_ids], Y_test_all[prelim_ids]
 
     # 3. Evaluate the trained model.
     # TODO: add top-5 accuracy for ImageNet.

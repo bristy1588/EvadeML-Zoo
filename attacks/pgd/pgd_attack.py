@@ -63,15 +63,18 @@ class CombinedLinfPGDAttack:
                                                   self.model1.y_input: y, self.model2.y_input: y, self.model3.y_input: y })
 
 
-      x += self.a * np.sign(grad)
+
       agg_acc = np.sum(y_cur1 == self.Y) + np.sum(y_cur2 == self.Y) + np.sum(y_cur3 == self.Y)
       acc = 1 - agg_acc/(3.0 * float(len(self.Y)))
-      x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
-      x = np.clip(x, 0, 1) # ensure valid pixel range
       print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc)
-      if acc  > max_acc:
+      if acc > max_acc:
         max_acc = acc
         x_max = x
+
+      x += self.a * np.sign(grad)
+      x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
+      x = np.clip(x, 0, 1) # ensure valid pixel range
+
     return x_max
 
 
@@ -84,8 +87,10 @@ class LinfPGDAttack:
     self.epsilon = epsilon
     self.k = k
     self.a = a
-    self.Y = np.argmax(Y, axis = 1) # Target Labels
-
+    if Y != None:
+        self.Y = np.argmax(Y, axis = 1) # Target Labels
+    else:
+        self.Y = None 
     self.rand = random_start
     self.squeeze = squeezer     # Squeezer for BPDA
     if loss_func == 'xent':
@@ -115,19 +120,23 @@ class LinfPGDAttack:
 
     max_acc = 0
     x_max = x
+    acc = 0.1
     for i in range(self.k):
       p_x = self.squeeze(reduce_precision_py(x, 256))  # First Reduce precision, then squeeze
       grad, l, y_cur = sess.run([self.grad, self.loss, self.model.y_pred], feed_dict={self.model.x_input: p_x,
                                             self.model.y_input: y})
 
+      if (self. Y != None):
+        acc = 1.0 -  (np.sum(y_cur == self.Y) / float(len(self.Y)))
+      if acc  >= max_acc:
+        max_acc = acc
+        x_max = x
+
       x += self.a * np.sign(grad)
-      acc = 1.0 -  (np.sum(y_cur == self.Y) / float(len(self.Y)))
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
       x = np.clip(x, 0, 1) # ensure valid pixel range
       print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc)
-      if acc  > max_acc:
-        max_acc = acc
-        x_max = x
+
     return x_max
 
 
