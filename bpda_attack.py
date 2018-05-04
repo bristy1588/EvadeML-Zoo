@@ -97,7 +97,7 @@ def main(argv=None):
     # Define input TF placeholder
     x = tf.placeholder(tf.float32, shape=(None, dataset.image_size, dataset.image_size, dataset.num_channels))
     y = tf.placeholder(tf.float32, shape=(None, dataset.num_classes))
-    sq = get_squeezer_by_name(FLAGS.filter, 'python')
+    sq = get_squeezer_by_name('non_local_means_color_13_3_4', 'python')
 
     with tf.variable_scope(FLAGS.model_name):
         """
@@ -244,7 +244,7 @@ def main(argv=None):
         X_test_adv, aux_info = maybe_bpda_generate_adv_examples(sess, model, x, y, X_test, Y_test_target, attack_name,
                                                            attack_params, use_cache = x_adv_fpath,
                                                            verbose=FLAGS.verbose, attack_log_fpath=attack_log_fpath,
-                                                           squeezer= sq)
+                                                           squeezer = sq)
 
         if FLAGS.clip > 0:
             # This is L-inf clipping.

@@ -50,7 +50,7 @@ def maybe_combined_generate_pgdli_examples(sess, model1, model2, model3,  x, y, 
     else:
         time_start = time.time()
         X_adv = combined_generate_pgdli_examples(sess, model1, model2, model3,  x, y, X, Y, attack_params,
-                                                 verbose, attack_log_fpath,sq1, sq2, sq3)
+                                                 verbose, attack_log_fpath, sq1, sq2, sq3)
         duration = time.time() - time_start
 
         if not isinstance(X_adv, np.ndarray):
@@ -73,7 +73,7 @@ def maybe_bpda_generate_adv_examples(sess, model, x, y, X, Y, attack_name, attac
     else:
         time_start = time.time()
         X_adv = bpda_generate_adv_examples(sess, model, x, y, X, Y, attack_name, attack_params,
-                                      verbose, attack_log_fpath)
+                                      verbose, attack_log_fpath,squeezer)
         duration = time.time() - time_start
 
         if not isinstance(X_adv, np.ndarray):

@@ -11,6 +11,7 @@ import tensorflow as tf
 import numpy as np
 
 from utils.squeeze import reduce_precision_py
+from robustness.feature_squeezing import FeatureSqueezingRC
 
 # Optimizes for 3 models for now, could be extended into more.
 class CombinedLinfPGDAttack:
@@ -64,17 +65,21 @@ class CombinedLinfPGDAttack:
 
 
 
-      agg_acc = np.sum(y_cur1 == self.Y) + np.sum(y_cur2 == self.Y) + np.sum(y_cur3 == self.Y)
-      acc = 1 - agg_acc/(3.0 * float(len(self.Y)))
-      print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc)
-      if acc > max_acc:
-        max_acc = acc
-        x_max = x
+      sq1_acc = 1 - np.sum(y_cur1 == self.Y)/(float(len(self.Y)))
+      sq2_acc = 1 - np.sum(y_cur2 == self.Y)/(float(len(self.Y)))
+      sq3_acc = 1 - np.sum(y_cur3 == self.Y)/(float(len(self.Y)))
+
+      print("Itr: ", i, " Loss: ", l)
+      print("  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc)
+      if min(sq1_acc, sq2_acc, sq3_acc) >= max_acc:
+        max_acc = min(sq1_acc, sq2_acc, sq3_acc)
+        x_max = np.copy(x)
 
       x += self.a * np.sign(grad)
+      x = np.clip(x, 0, 1)  # ensure valid pixel range
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
-      x = np.clip(x, 0, 1) # ensure valid pixel range
 
+    #x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
     return x_max
 
 
@@ -121,6 +126,7 @@ class LinfPGDAttack:
     acc = 0.0
     for i in range(self.k):
       p_x = self.squeeze(reduce_precision_py(x, 256))  # First Reduce precision, then squeeze
+
       grad, l, y_cur = sess.run([self.grad, self.loss, self.model.y_pred], feed_dict={self.model.x_input: p_x,
                                             self.model.y_input: y})
 
@@ -128,8 +134,19 @@ class LinfPGDAttack:
       if acc  >= max_acc:
         max_acc = acc
         x_max = x
-      y_robust = self.model.rc.predict(reduce_precision_py(x, 256))
-      acc_rc =  1.0 -  (np.sum((np.argmax(y_robust,1)) == self.Y) / float(len(self.Y)))
+      rc = FeatureSqueezingRC(self.model.keras_model, 'FeatureSqueezing?squeezer=non_local_means_color_13_3_4')
+      y_robust = rc.predict(reduce_precision_py(x, 256))
+      acc_rc = 1.0 - np.sum(np.argmax(y_robust, 1) == self.Y) / float(len(self.Y))
+
+      """
+      rc1 = FeatureSqueezingRC(self.model.keras_model, 'FeatureSqueezing?squeezer=non_local_means_color_13_3_4')
+      rc2 = FeatureSqueezingRC(self.model.keras_model, 'FeatureSqueezing?squeezer=non_local_means_color_13_3_4')
+      
+      y_robust2 = rc1.predict(reduce_precision_py(x, 256))
+      y_robust3 = rc2.predict(reduce_precision_py(x, 256))
+
+      diff_rc = np.sum( np.argmax(y_robust,1) == np.argmax(y_robust2,1))/ float(len(self.Y))
+      """
       x += self.a * np.sign(grad)
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
       x = np.clip(x, 0, 1) # ensure valid pixel range
