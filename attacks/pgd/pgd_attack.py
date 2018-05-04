@@ -87,10 +87,8 @@ class LinfPGDAttack:
     self.epsilon = epsilon
     self.k = k
     self.a = a
-    if Y != None:
-        self.Y = np.argmax(Y, axis = 1) # Target Labels
-    else:
-        self.Y = None 
+
+    self.Y = np.argmax(Y, axis = 1) # Target Labels
     self.rand = random_start
     self.squeeze = squeezer     # Squeezer for BPDA
     if loss_func == 'xent':
@@ -126,12 +124,11 @@ class LinfPGDAttack:
       grad, l, y_cur = sess.run([self.grad, self.loss, self.model.y_pred], feed_dict={self.model.x_input: p_x,
                                             self.model.y_input: y})
 
-      if (self. Y != None):
-        acc = 1.0 -  (np.sum(y_cur == self.Y) / float(len(self.Y)))
+      acc = 1.0 -  (np.sum(y_cur == self.Y) / float(len(self.Y)))
       if acc  >= max_acc:
         max_acc = acc
         x_max = x
-      y_robust = self.model.rc.predict(p_x)
+      y_robust = self.model.rc.predict(reduce_precision_py(x, 256))
       acc_rc =  1.0 -  (np.sum((np.argmax(y_robust,1)) == self.Y) / float(len(self.Y)))
       x += self.a * np.sign(grad)
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
