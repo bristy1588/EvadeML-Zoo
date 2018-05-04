@@ -311,7 +311,7 @@ class DetectionEvaluator:
                 X_fae, Y_fae = self.get_fae_testing_data()
             else:
                 X_fae, Y_fae = self.get_fae_data()
-            if X_fae != None:
+            if X_fae:
                 print(" X Fae Shape: ", X_fae.shape)
                 Y_test_pred, Y_test_pred_score = detector.test(X_fae)
                 _, tpr, _, tp, ap = evalulate_detection_test(Y_fae, Y_test_pred)
