@@ -97,7 +97,7 @@ def main(argv=None):
     # Define input TF placeholder
     x = tf.placeholder(tf.float32, shape=(None, dataset.image_size, dataset.image_size, dataset.num_channels))
     y = tf.placeholder(tf.float32, shape=(None, dataset.num_classes))
-    sq = get_squeezer_by_name('non_local_means_color_13_3_4', 'python')
+    sq = get_squeezer_by_name(FLAGS.filter, 'python')
 
     with tf.variable_scope(FLAGS.model_name):
         """

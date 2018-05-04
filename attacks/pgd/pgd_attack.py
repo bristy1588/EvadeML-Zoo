@@ -134,23 +134,10 @@ class LinfPGDAttack:
       if acc  >= max_acc:
         max_acc = acc
         x_max = x
-      rc = FeatureSqueezingRC(self.model.keras_model, 'FeatureSqueezing?squeezer=non_local_means_color_13_3_4')
-      y_robust = rc.predict(reduce_precision_py(x, 256))
-      acc_rc = 1.0 - np.sum(np.argmax(y_robust, 1) == self.Y) / float(len(self.Y))
-
-      """
-      rc1 = FeatureSqueezingRC(self.model.keras_model, 'FeatureSqueezing?squeezer=non_local_means_color_13_3_4')
-      rc2 = FeatureSqueezingRC(self.model.keras_model, 'FeatureSqueezing?squeezer=non_local_means_color_13_3_4')
-      
-      y_robust2 = rc1.predict(reduce_precision_py(x, 256))
-      y_robust3 = rc2.predict(reduce_precision_py(x, 256))
-
-      diff_rc = np.sum( np.argmax(y_robust,1) == np.argmax(y_robust2,1))/ float(len(self.Y))
-      """
       x += self.a * np.sign(grad)
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
       x = np.clip(x, 0, 1) # ensure valid pixel range
-      print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc, " RC Acc: ", acc_rc)
+      print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc)
 
     return x_max
 
