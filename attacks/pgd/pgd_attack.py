@@ -119,8 +119,8 @@ class LinfPGDAttack:
       x = np.copy(x_nat)
 
     max_acc = 0
-    x_max = x
-    acc = 0.1
+    x_max = x_nat
+    acc = 0.0
     for i in range(self.k):
       p_x = self.squeeze(reduce_precision_py(x, 256))  # First Reduce precision, then squeeze
       grad, l, y_cur = sess.run([self.grad, self.loss, self.model.y_pred], feed_dict={self.model.x_input: p_x,
@@ -131,11 +131,12 @@ class LinfPGDAttack:
       if acc  >= max_acc:
         max_acc = acc
         x_max = x
-
+      y_robust = self.model.rc.predict(p_x)
+      acc_rc =  1.0 -  (np.sum((np.argmax(y_robust,1)) == self.Y) / float(len(self.Y)))
       x += self.a * np.sign(grad)
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
       x = np.clip(x, 0, 1) # ensure valid pixel range
-      print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc)
+      print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc, " RC Acc: ", acc_rc)
 
     return x_max
 
