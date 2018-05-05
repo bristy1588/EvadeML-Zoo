@@ -52,6 +52,10 @@ flags.DEFINE_string('filter', '', 'Supported: median_3_3, median_2_2, non_local_
 flags.DEFINE_string('result_folder', "results", 'The output folder for results.')
 flags.DEFINE_boolean('verbose', False, 'Stdout level. The hidden content will be saved to log files anyway.')
 
+flags.DEFINE_string('detection', '', 'Supported: feature_squeezing.')
+flags.DEFINE_boolean('detection_train_test_mode', True, 'Split into train/test datasets.')
+
+
 FLAGS.model_name = FLAGS.model_name.lower()
 
 def load_tf_session():
