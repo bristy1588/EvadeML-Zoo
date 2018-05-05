@@ -13,6 +13,8 @@ import numpy as np
 from utils.squeeze import reduce_precision_py
 from robustness.feature_squeezing import FeatureSqueezingRC
 
+l2_dist = lambda x1,x2: np.sum((x1-x2)**2, axis=tuple(range(len(x1.shape))[1:]))
+
 # Optimizes for 3 models for now, could be extended into more.
 class CombinedLinfPGDAttack:
   def __init__(self, model1, model2, model3, epsilon, k, a, random_start, loss_func, Y=None,
@@ -83,6 +85,7 @@ class CombinedLinfPGDAttack:
     return x_max
 
 
+
 class LinfPGDAttack:
   def __init__(self, model, epsilon, k, a, random_start, loss_func, squeezer=lambda x:x, Y=None, vanilla_model = None):
     """Attack parameter initialization. The attack performs k steps of
@@ -99,9 +102,17 @@ class LinfPGDAttack:
     self.Y = np.argmax(Y, axis = 1) # Target Labels
     self.rand = random_start
     self.squeeze = squeezer     # Squeezer for BPDA
-    if loss_func == 'xent':
-      self.loss = model.xent + vanilla_model.xent
 
+    if loss_func == 'xent':
+
+      vanilla_y_softmax = tf.nn.softmax(vanilla_model.pre_softmax)
+      y_softmax         = tf.nn.softmax(model.pre_softmax)
+      diff_softmax = vanilla_y_softmax - y_softmax
+
+      self.reg_loss = (tf.reduce_sum(tf.multiply(diff_softmax, diff_softmax)) /
+                    tf.reduce_sum(tf.multiply(y_softmax, y_softmax)))
+
+      self.loss = model.xent + vanilla_model.xent + self.reg_loss
     elif loss_func == 'cw':
       label_mask = tf.one_hot(model.y_input,
                               10,
@@ -131,7 +142,8 @@ class LinfPGDAttack:
       x_r = reduce_precision_py(x, 256)
       p_x = self.squeeze(x_r) # First Reduce precision, then squeeze
 
-      grad, l, y_cur, y_cur_vanilla = sess.run([self.grad, self.loss, self.model.y_pred, self.vanilla_model.y_pred],
+      grad, l, y_cur, y_cur_vanilla, r_loss = sess.run([self.grad, self.loss, self.model.y_pred, self.vanilla_model.y_pred,
+                                                        self.reg_loss],
                                                feed_dict = { self.model.x_input: p_x, self.model.x_input : x_r,
                                                 self.model.y_input: y, self.vanilla_model.y_input : y})
 
@@ -143,7 +155,7 @@ class LinfPGDAttack:
       x += self.a * np.sign(grad)
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
       x = np.clip(x, 0, 1) # ensure valid pixel range
-      print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc, " Vanilla Acc:", acc_vanilla)
+      print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc, " Vanilla Acc:", acc_vanilla, " Reg Loss:", r_loss)
 
     return x_max
 
