@@ -322,6 +322,21 @@ def main(argv=None):
                             attack_string_list, X_test_adv_discretized_list,
                             fname_prefix, selected_idx_vis, result_folder_robustness)
 
+        # 7. Detection experiment.
+        # Example: --detection "FeatureSqueezing?distance_measure=l1&squeezers=median_smoothing_2,bit_depth_4,bilateral_filter_15_15_60;"
+    if FLAGS.detection != '':
+        from detections.base import DetectionEvaluator
+
+        result_folder_detection = os.path.join(FLAGS.result_folder, "detection")
+        csv_fname = "%s_attacks_%s_detection.csv" % (task_id, attack_string_hash)
+        de = DetectionEvaluator(model, result_folder_detection, csv_fname, FLAGS.dataset_name)
+        Y_test_all_pred = model.predict(X_test_all)
+        de.build_detection_dataset(X_test_all, Y_test_all, Y_test_all_pred, selected_idx,
+                                   X_test_adv_discretized_list, Y_test_adv_discretized_pred_list,
+                                   attack_string_list, attack_string_hash, FLAGS.clip,
+                                   Y_test_target_next, Y_test_target_ll)
+        de.evaluate_detections(FLAGS.detection)
+
 
 if __name__ == '__main__':
     main()
