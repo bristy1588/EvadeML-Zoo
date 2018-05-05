@@ -139,7 +139,7 @@ class LinfPGDAttack:
       acc_vanilla  = 1.0 -  (np.sum(y_cur_vanilla == self.Y) / float(len(self.Y)))
       if acc  >= max_acc:
         max_acc = acc
-        x_max = x
+        x_max = np.copy(x)
       x += self.a * np.sign(grad)
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
       x = np.clip(x, 0, 1) # ensure valid pixel range
