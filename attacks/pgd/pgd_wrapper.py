@@ -29,6 +29,7 @@ class PGDModelWrapper:
         self.x_input = x
         self.y_input = tf.argmax(y, 1)
         self.pre_softmax = model_logits(x)
+        self.keras_model = keras_model
 
         y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
             labels=self.y_input, logits=self.pre_softmax)
@@ -38,13 +39,16 @@ class PGDModelWrapper:
 
 
 
-def generate_pgdli_examples(sess, model, x, y, X, Y, attack_params, verbose, attack_log_fpath):
+def generate_pgdli_examples(sess, model, x, y, X, Y, attack_params, verbose, attack_log_fpath, vanilla_model = None):
     model_for_pgd = PGDModelWrapper(model, x, y)
+    if vanilla_model is None:
+        vanilla_model = model
+    vanilla_model_for_pgd = PGDModelWrapper(vanilla_model, x, y)
     params = {'model': model_for_pgd, 'epsilon': 0.3, 'k': 20, 'a':0.01, 'random_start':True,
-                     'loss_func':'xent', 'squeezer' : lambda x:x, 'Y' : Y}
+                     'loss_func':'xent', 'squeezer' : lambda x:x, 'Y' : Y, 'vanilla_model' : vanilla_model_for_pgd}
     params = override_params(params, attack_params)
     attack = LinfPGDAttack(**params)
-    print("BRISTY :: Params", params)
+
     Y_class = np.argmax(Y, 1)
     X_adv = attack.perturb(X, Y_class, sess)
     return X_adv

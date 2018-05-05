@@ -187,7 +187,7 @@ def main(argv=None):
 
 
     # 5. Generate adversarial examples.
-    from attacks import maybe_generate_adv_examples
+    from attacks import maybe_median_generate_adv_examples
     from utils.squeeze import reduce_precision_py
     from utils.parameter_parser import parse_params
     attack_string_hash = hashlib.sha1(FLAGS.attacks.encode('utf-8')).hexdigest()[:5]
@@ -244,9 +244,10 @@ def main(argv=None):
         x_adv_fpath = os.path.join(X_adv_cache_folder, x_adv_fname)
 
         #
-        X_test_adv, aux_info = maybe_generate_adv_examples(sess, attack_model, x, y, X_test, Y_test_target, attack_name,
-                                                           attack_params, use_cache = x_adv_fpath,
-                                                           verbose=FLAGS.verbose, attack_log_fpath=attack_log_fpath)
+        X_test_adv, aux_info = maybe_median_generate_adv_examples(sess, attack_model, model, x, y, X_test,
+                                                                  Y_test_target, attack_params,use_cache = x_adv_fpath,
+                                                                  verbose=FLAGS.verbose,
+                                                                  attack_log_fpath=attack_log_fpath)
 
         if FLAGS.clip > 0:
             # This is L-inf clipping.

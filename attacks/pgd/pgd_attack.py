@@ -16,7 +16,7 @@ from robustness.feature_squeezing import FeatureSqueezingRC
 # Optimizes for 3 models for now, could be extended into more.
 class CombinedLinfPGDAttack:
   def __init__(self, model1, model2, model3, epsilon, k, a, random_start, loss_func, Y=None,
-               sq1 = lambda x:x, sq2 = lambda x:x, sq3 = lambda x:x ):
+               sq1 = lambda x:x, sq2 = lambda x:x, sq3 = lambda x:x):
     """Attack parameter initialization. The attack performs k steps of
        size a, while always staying within epsilon from the initial
        point.
@@ -84,7 +84,7 @@ class CombinedLinfPGDAttack:
 
 
 class LinfPGDAttack:
-  def __init__(self, model, epsilon, k, a, random_start, loss_func, squeezer=lambda x:x, Y=None):
+  def __init__(self, model, epsilon, k, a, random_start, loss_func, squeezer=lambda x:x, Y=None, vanilla_model = None):
     """Attack parameter initialization. The attack performs k steps of
        size a, while always staying within epsilon from the initial
        point."""
@@ -92,12 +92,16 @@ class LinfPGDAttack:
     self.epsilon = epsilon
     self.k = k
     self.a = a
+    if vanilla_model is None:
+      vanilla_model = model
+    self.vanilla_model = vanilla_model
 
     self.Y = np.argmax(Y, axis = 1) # Target Labels
     self.rand = random_start
     self.squeeze = squeezer     # Squeezer for BPDA
     if loss_func == 'xent':
-      self.loss = model.xent
+      self.loss = model.xent + vanilla_model.xent
+
     elif loss_func == 'cw':
       label_mask = tf.one_hot(model.y_input,
                               10,
@@ -110,7 +114,6 @@ class LinfPGDAttack:
     else:
       print('Unknown loss function. Defaulting to cross-entropy')
       self.loss = model.xent
-
     self.grad = tf.gradients(self.loss, model.x_input)[0]
 
   def perturb(self, x_nat, y, sess):
@@ -125,19 +128,22 @@ class LinfPGDAttack:
     x_max = x_nat
     acc = 0.0
     for i in range(self.k):
-      p_x = self.squeeze(reduce_precision_py(x, 256))  # First Reduce precision, then squeeze
+      x_r = reduce_precision_py(x, 256)
+      p_x = self.squeeze(x_r) # First Reduce precision, then squeeze
 
-      grad, l, y_cur = sess.run([self.grad, self.loss, self.model.y_pred], feed_dict={self.model.x_input: p_x,
-                                            self.model.y_input: y})
+      grad, l, y_cur, y_cur_vanilla = sess.run([self.grad, self.loss, self.model.y_pred, self.vanilla_model.y_pred],
+                                               feed_dict = { self.model.x_input: p_x, self.model.x_input : x_r,
+                                                self.model.y_input: y, self.vanilla_model.y_input : y})
 
-      acc = 1.0 -  (np.sum(y_cur == self.Y) / float(len(self.Y)))
+      acc          = 1.0 -  (np.sum(y_cur         == self.Y) / float(len(self.Y)))
+      acc_vanilla  = 1.0 -  (np.sum(y_cur_vanilla == self.Y) / float(len(self.Y)))
       if acc  >= max_acc:
         max_acc = acc
         x_max = x
       x += self.a * np.sign(grad)
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
       x = np.clip(x, 0, 1) # ensure valid pixel range
-      print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc)
+      print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc, " Vanilla Acc:", acc_vanilla)
 
     return x_max
 

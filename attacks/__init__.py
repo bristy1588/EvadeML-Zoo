@@ -64,6 +64,32 @@ def maybe_combined_generate_pgdli_examples(sess, model1, model2, model3,  x, y, 
             pickle.dump((X_adv, aux_info), open(x_adv_fpath, 'wb'))
     return X_adv, duration
 
+
+
+def maybe_median_generate_adv_examples(sess, model, vanilla_model, x, y, X, Y, attack_params,
+                                           use_cache=False, verbose=True, attack_log_fpath=None):
+    x_adv_fpath = use_cache
+    if use_cache and os.path.isfile(x_adv_fpath):
+        print ("Loading adversarial examples from [%s]." % os.path.basename(x_adv_fpath))
+        X_adv, duration = pickle.load(open(x_adv_fpath, "rb"))
+    else:
+        time_start = time.time()
+        X_adv = generate_pgdli_examples(sess, model, x, y, X, Y, attack_params, verbose, attack_log_fpath,
+                                                 vanilla_model)
+        duration = time.time() - time_start
+
+        if not isinstance(X_adv, np.ndarray):
+            X_adv, aux_info = X_adv
+        else:
+            aux_info = {}
+
+        aux_info['duration'] = duration
+
+        if use_cache:
+            pickle.dump((X_adv, aux_info), open(x_adv_fpath, 'wb'))
+    return X_adv, duration
+
+
 def maybe_bpda_generate_adv_examples(sess, model, x, y, X, Y, attack_name, attack_params, use_cache=False, verbose=True,
                                attack_log_fpath=None, squeezer=lambda x:x):
     x_adv_fpath = use_cache
@@ -72,8 +98,7 @@ def maybe_bpda_generate_adv_examples(sess, model, x, y, X, Y, attack_name, attac
         X_adv, duration = pickle.load(open(x_adv_fpath, "rb"))
     else:
         time_start = time.time()
-        X_adv = bpda_generate_adv_examples(sess, model, x, y, X, Y, attack_name, attack_params,
-                                      verbose, attack_log_fpath,squeezer)
+        X_adv = generate_pgdli_examples
         duration = time.time() - time_start
 
         if not isinstance(X_adv, np.ndarray):
