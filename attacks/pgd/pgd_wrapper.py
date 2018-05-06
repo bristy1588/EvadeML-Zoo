@@ -1,6 +1,6 @@
 
 import warnings
-from .pgd_attack import CombinedLinfPGDAttackCIFAR10, LinfPGDAttack, CombinedLinfPGDAttack
+from .pgd_attack import CombinedLinfPGDAttackImageNet, CombinedLinfPGDAttackCIFAR10, LinfPGDAttack, CombinedLinfPGDAttack
 
 from keras.models import Model
 import tensorflow as tf
@@ -72,7 +72,7 @@ def combined_generate_pgdli_examples(sess, model1, model2, model3,  x, y, X, Y, 
     params = {'model1': model_1_for_pgd,  'model2': model_2_for_pgd,'model3': model_3_for_pgd, 'epsilon': 0.3,
               'k': 40, 'a': 0.01, 'random_start': True,'loss_func': 'xent', 'sq1': sq1, 'sq2': sq2, 'sq3': sq3, 'Y': Y}
     params = override_params(params, attack_params)
-    attack = CombinedLinfPGDAttack(**params)
+    attack = CombinedLinfPGDAttackImageNet(**params)
     Y_class = np.argmax(Y, 1)
     X_adv = attack.perturb(X, Y_class, sess)
     return X_adv
