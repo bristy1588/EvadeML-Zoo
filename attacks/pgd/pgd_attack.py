@@ -75,25 +75,24 @@ class CombinedLinfPGDAttack:
       x1 = self.sq1(reduce_precision_py(x, 256))
       x2 = self.sq2(reduce_precision_py(x, 256))
       x3 = self.sq3(reduce_precision_py(x, 256))
- 
-      grad, l, y_cur1, y_cur2, y_cur3, y_van, r_loss = sess.run([self.grad, self.loss, self.model1.y_pred, self.model2.y_pred,
-                                                  self.model3.y_pred,self.vanilla_model.y_pred, self.reg_loss], feed_dict={ self.model1.x_input: x1,
-                                                  self.model2.x_input: x2, self.model3.x_input: x3, self.vanilla_model.x_input: x1
-                                                  , self.model1.y_input: y, self.model2.y_input: y, self.model3.y_input: y,
-						  self.vanilla_model.y_input: y })
-
-
+      x_van = reduce_precision_py(x, 256)
+      grad, l, y_cur1, y_cur2, y_cur3, y_van, r_loss = sess.run([self.grad, self.loss, self.model1.y_pred,
+                              self.model2.y_pred,self.model3.y_pred,self.vanilla_model.y_pred, self.reg_loss],
+                              feed_dict={ self.model1.x_input: x1, self.model2.x_input: x2, self.model3.x_input: x3,
+                              self.vanilla_model.x_input: x_van, self.model1.y_input: y, self.model2.y_input:
+                              y, self.model3.y_input: y,  self.vanilla_model.y_input: y })
 
       sq1_acc = 1 - np.sum(y_cur1 == self.Y)/(float(len(self.Y)))
       sq2_acc = 1 - np.sum(y_cur2 == self.Y)/(float(len(self.Y)))
       sq3_acc = 1 - np.sum(y_cur3 == self.Y)/(float(len(self.Y)))
       van_acc = 1 - np.sum(y_van  == self.Y)/(float(len(self.Y)))
-      min_acc = min(sq1_acc, sq2_acc, sq3_acc) 
+      min_acc = min(sq1_acc, sq2_acc, sq3_acc)
+
       print("Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss)
       print("  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc, " Vanilla :", van_acc)
       if min_acc > 0.95 and r_loss < r_min:
         r_min = r_loss
-	x_max = np.copy(x)
+        x_max = np.copy(x)
         sel = i 
 
       x += self.a * np.sign(grad)
@@ -156,7 +155,7 @@ class CombinedLinfPGDAttackImageNet:
       x = x_nat + np.random.uniform(-self.epsilon, self.epsilon, x_nat.shape)
     else:
       x = np.copy(x_nat)
-    
+
     r_min = 100000.00
     max_acc = 0
     x_max = x
@@ -165,34 +164,38 @@ class CombinedLinfPGDAttackImageNet:
       # Performing BPDA and EOT here
       x1 = self.sq1(reduce_precision_py(x, 256))
       x2 = self.sq2(reduce_precision_py(x, 256))
-      x3 = self.sq2(reduce_precision_py(x, 256))
- 
-      grad, l, y_cur1, y_cur2, y_cur3, y_van, r_loss = sess.run([self.grad, self.loss, self.model1.y_pred, self.model2.y_pred,
-                                                  self.model3.y_pred,self.vanilla_model.y_pred, self.reg_loss], feed_dict={ self.model1.x_input: x1,
-                                                  self.model2.x_input: x2, self.model3.x_input: x3, self.vanilla_model.x_input: x1
-                                                  , self.model1.y_input: y, self.model2.y_input: y, self.model3.y_input: y,
-						  self.vanilla_model.y_input: y })
+      x3 = self.sq3(reduce_precision_py(x, 256))
+      x_van = reduce_precision_py(x, 256)
+      grad, l, y_cur1, y_cur2, y_cur3, y_van, r_loss = sess.run([self.grad, self.loss, self.model1.y_pred,
+                                                                 self.model2.y_pred, self.model3.y_pred,
+                                                                 self.vanilla_model.y_pred, self.reg_loss],
+                                                                feed_dict={self.model1.x_input: x1,
+                                                                           self.model2.x_input: x2,
+                                                                           self.model3.x_input: x3,
+                                                                           self.vanilla_model.x_input: x_van,
+                                                                           self.model1.y_input: y, self.model2.y_input:
+                                                                             y, self.model3.y_input: y,
+                                                                           self.vanilla_model.y_input: y})
 
+      sq1_acc = 1 - np.sum(y_cur1 == self.Y) / (float(len(self.Y)))
+      sq2_acc = 1 - np.sum(y_cur2 == self.Y) / (float(len(self.Y)))
+      sq3_acc = 1 - np.sum(y_cur3 == self.Y) / (float(len(self.Y)))
+      van_acc = 1 - np.sum(y_van == self.Y) / (float(len(self.Y)))
+      min_acc = min(sq1_acc, sq2_acc, sq3_acc)
 
-
-      sq1_acc = 1 - np.sum(y_cur1 == self.Y)/(float(len(self.Y)))
-      sq2_acc = 1 - np.sum(y_cur2 == self.Y)/(float(len(self.Y)))
-      sq3_acc = 1 - np.sum(y_cur3 == self.Y)/(float(len(self.Y)))
-      van_acc = 1 - np.sum(y_van  == self.Y)/(float(len(self.Y)))
-      min_acc = min(sq1_acc, sq2_acc, sq3_acc) 
       print("Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss)
       print("  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc, " Vanilla :", van_acc)
       if min_acc > 0.95 and r_loss < r_min:
         r_min = r_loss
-	x_max = np.copy(x)
-        sel = i 
+        x_max = np.copy(x)
+        sel = i
 
       x += self.a * np.sign(grad)
       x = np.clip(x, 0, 1)  # ensure valid pixel range
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
-   
+
     print(" Selected i:", sel, " Reg Loss:", r_min)
-    #x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
+    # x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
     return x_max
 
 
@@ -247,7 +250,7 @@ class CombinedLinfPGDAttackCIFAR10:
       x = x_nat + np.random.uniform(-self.epsilon, self.epsilon, x_nat.shape)
     else:
       x = np.copy(x_nat)
-    
+
     r_min = 100000.00
     max_acc = 0
     x_max = x
@@ -256,34 +259,38 @@ class CombinedLinfPGDAttackCIFAR10:
       # Performing BPDA and EOT here
       x1 = self.sq1(reduce_precision_py(x, 256))
       x2 = self.sq2(reduce_precision_py(x, 256))
-      x3 = self.sq2(reduce_precision_py(x, 256))
- 
-      grad, l, y_cur1, y_cur2, y_cur3, y_van, r_loss = sess.run([self.grad, self.loss, self.model1.y_pred, self.model2.y_pred,
-                                                  self.model3.y_pred,self.vanilla_model.y_pred, self.reg_loss], feed_dict={ self.model1.x_input: x1,
-                                                  self.model2.x_input: x2, self.model3.x_input: x3, self.vanilla_model.x_input: x1
-                                                  , self.model1.y_input: y, self.model2.y_input: y, self.model3.y_input: y,
-						  self.vanilla_model.y_input: y })
+      x3 = self.sq3(reduce_precision_py(x, 256))
+      x_van = reduce_precision_py(x, 256)
+      grad, l, y_cur1, y_cur2, y_cur3, y_van, r_loss = sess.run([self.grad, self.loss, self.model1.y_pred,
+                                                                 self.model2.y_pred, self.model3.y_pred,
+                                                                 self.vanilla_model.y_pred, self.reg_loss],
+                                                                feed_dict={self.model1.x_input: x1,
+                                                                           self.model2.x_input: x2,
+                                                                           self.model3.x_input: x3,
+                                                                           self.vanilla_model.x_input: x_van,
+                                                                           self.model1.y_input: y, self.model2.y_input:
+                                                                             y, self.model3.y_input: y,
+                                                                           self.vanilla_model.y_input: y})
 
+      sq1_acc = 1 - np.sum(y_cur1 == self.Y) / (float(len(self.Y)))
+      sq2_acc = 1 - np.sum(y_cur2 == self.Y) / (float(len(self.Y)))
+      sq3_acc = 1 - np.sum(y_cur3 == self.Y) / (float(len(self.Y)))
+      van_acc = 1 - np.sum(y_van == self.Y) / (float(len(self.Y)))
+      min_acc = min(sq1_acc, sq2_acc, sq3_acc)
 
-
-      sq1_acc = 1 - np.sum(y_cur1 == self.Y)/(float(len(self.Y)))
-      sq2_acc = 1 - np.sum(y_cur2 == self.Y)/(float(len(self.Y)))
-      sq3_acc = 1 - np.sum(y_cur3 == self.Y)/(float(len(self.Y)))
-      van_acc = 1 - np.sum(y_van  == self.Y)/(float(len(self.Y)))
-      min_acc = min(sq1_acc, sq2_acc, sq3_acc) 
       print("Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss)
       print("  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc, " Vanilla :", van_acc)
       if min_acc > 0.95 and r_loss < r_min:
         r_min = r_loss
-	x_max = np.copy(x)
-        sel = i 
+        x_max = np.copy(x)
+        sel = i
 
       x += self.a * np.sign(grad)
       x = np.clip(x, 0, 1)  # ensure valid pixel range
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
-   
+
     print(" Selected i:", sel, " Reg Loss:", r_min)
-    #x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
+    # x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
     return x_max
 
 
