@@ -28,6 +28,8 @@ class CombinedLinfPGDAttack:
     self.model2 = model2
     self.model3 = model3
     self.epsilon = epsilon
+    self.vanilla_model = model1   # Models 1,2 are bit-depth models 
+	
     self.k = k
     self.a = a
     self.Y = np.argmax(Y, axis = 1) # Target Labels
@@ -36,7 +38,19 @@ class CombinedLinfPGDAttack:
     self.sq1 = sq1
     self.sq2 = sq2
     self.sq3 = sq3
-    self.loss = model1.xent + model2.xent + model3.xent
+    
+    vanilla_y_softmax = tf.nn.softmax(self.vanilla_model.pre_softmax)
+    y1_softmax        = tf.nn.softmax(self.model1.pre_softmax)
+    y2_softmax        = tf.nn.softmax(self.model2.pre_softmax)
+    y3_softmax        = tf.nn.softmax(self.model3.pre_softmax) 
+    t1 = y1_softmax - vanilla_y_softmax
+    t2 = y2_softmax - vanilla_y_softmax
+    t3 = y3_softmax - vanilla_y_softmax
+    diff_softmax_1 = tf.nn.relu(tf.reduce_sum(tf.multiply(t1, t1), axis=1) - 1.40)
+    diff_softmax_2 = tf.nn.relu(tf.reduce_sum(tf.multiply(t2, t2), axis=1) - 1.40)
+    diff_softmax_3 = tf.nn.relu(tf.reduce_sum(tf.multiply(t3, t3), axis=1) - 1.40)
+    self.reg_loss = 500 * (tf.reduce_sum(diff_softmax_1) + tf.reduce_sum(diff_softmax_2) + tf.reduce_sum(diff_softmax_3)) 
+    self.loss = model1.xent + model2.xent + model3.xent - self.reg_loss
     # (TODO) Need to add an regularizaton of some sort.
     if loss_func != 'xent':
       print('Unknown loss function. Defaulting to cross-entropy')
@@ -60,19 +74,20 @@ class CombinedLinfPGDAttack:
       x2 = self.sq2(reduce_precision_py(x, 256))
       x3 = self.sq2(reduce_precision_py(x, 256))
 
-      grad, l, y_cur1, y_cur2, y_cur3 = sess.run([self.grad, self.loss, self.model1.y_pred, self.model2.y_pred,
-                                                  self.model3.y_pred], feed_dict={ self.model1.x_input: x1,
-                                                  self.model2.x_input: x2, self.model3.x_input: x3,
-                                                  self.model1.y_input: y, self.model2.y_input: y, self.model3.y_input: y })
+      grad, l, y_cur1, y_cur2, y_cur3, y_van, r_loss = sess.run([self.grad, self.loss, self.model1.y_pred, self.model2.y_pred,
+                                                  self.model3.y_pred, self.reg_loss], feed_dict={ self.model1.x_input: x1,
+                                                  self.model2.x_input: x2, self.model3.x_input: x3, self.vanilla_model.x_input: x1
+                                                  , self.model1.y_input: y, self.model2.y_input: y, self.model3.y_input: y,
+						  self.vanilla_model.y_input: y })
 
 
 
       sq1_acc = 1 - np.sum(y_cur1 == self.Y)/(float(len(self.Y)))
       sq2_acc = 1 - np.sum(y_cur2 == self.Y)/(float(len(self.Y)))
       sq3_acc = 1 - np.sum(y_cur3 == self.Y)/(float(len(self.Y)))
-
-      print("Itr: ", i, " Loss: ", l)
-      print("  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc)
+      van_acc = 1 - np.sum(y_van  == self.Y)/(float(len(self.Y)))
+      print("Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss)
+      print("  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc, " Vanilla :", van_acc)
       if min(sq1_acc, sq2_acc, sq3_acc) >= max_acc:
         max_acc = min(sq1_acc, sq2_acc, sq3_acc)
         x_max = np.copy(x)
@@ -105,15 +120,16 @@ class LinfPGDAttack:
 
 
     if loss_func == 'xent':
-      """
+     
       vanilla_y_softmax = tf.nn.softmax(vanilla_model.pre_softmax)
       y_softmax         = tf.nn.softmax(model.pre_softmax)
-      t1 = tf.abs(vanilla_y_softmax - y_softmax)
-      diff_softmax = tf.multiply(t1, t1)
-      self.reg_loss =  tf.reduce_sum(tf.reduce_max(diff_softmax, axis=1))
-      """
-      diff = self.model.x_input - self.model.x_nat
-      self.reg_loss = tf.reduce_sum(tf.multiply(diff, diff))
+      t1 = vanilla_y_softmax - y_softmax
+      diff_softmax = tf.nn.relu(tf.reduce_sum(tf.multiply(t1, t1), axis=1) - 1.50)
+      self.reg_loss = 100 * tf.reduce_sum(diff_softmax)
+      
+      # Note: The commented parts are notuseful. Keeping them around for later?
+      #diff = self.model.x_input - self.model.x_nat
+      #self.reg_loss += 10 * tf.reduce_sum(tf.multiply(diff, diff))
       self.loss = tf.minimum(model.xent, vanilla_model.xent) - self.reg_loss
 
     elif loss_func == 'cw':
@@ -141,6 +157,7 @@ class LinfPGDAttack:
     max_acc = 0
     x_max = x_nat
     acc = 0.0
+    r_min = 100000.00 # A very large value 
     for i in range(self.k):
       x_r = reduce_precision_py(x, 256)
       p_x = self.squeeze(x_r) # First Reduce precision, then squeeze
@@ -148,14 +165,16 @@ class LinfPGDAttack:
       grad, l, y_cur, y_cur_vanilla, r_loss = sess.run([self.grad, self.loss, self.model.y_pred, self.vanilla_model.y_pred,
                                                         self.reg_loss],
                                                feed_dict = { self.model.x_input: p_x, self.model.x_input : x_r,
-                                                self.model.y_input: y, self.vanilla_model.y_input : y,
-                                                             self.model.x_nat : x_nat})
-
+                                                self.model.y_input: y, self.vanilla_model.y_input : y})
       acc          = 1.0 -  (np.sum(y_cur         == self.Y) / float(len(self.Y)))
       acc_vanilla  = 1.0 -  (np.sum(y_cur_vanilla == self.Y) / float(len(self.Y)))
-      if acc  >= max_acc:
-        max_acc = acc
+      if min(acc, acc_vanilla) > max_acc + 0.005 :
+        max_acc = min(acc, acc_vanilla)
         x_max = np.copy(x)
+      if (abs(min(acc, acc_vanilla) - max_acc) <= 0.005) and (r_loss < r_min + 0.005):
+	r_min = r_loss 
+	x_max = np.copy(x)
+ 
       x += self.a * np.sign(grad)
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
       x = np.clip(x, 0, 1) # ensure valid pixel range
