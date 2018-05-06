@@ -103,16 +103,19 @@ class LinfPGDAttack:
     self.rand = random_start
     self.squeeze = squeezer     # Squeezer for BPDA
 
-    if loss_func == 'xent':
 
+    if loss_func == 'xent':
+      """
       vanilla_y_softmax = tf.nn.softmax(vanilla_model.pre_softmax)
       y_softmax         = tf.nn.softmax(model.pre_softmax)
-      diff_softmax = vanilla_y_softmax - y_softmax
+      t1 = tf.abs(vanilla_y_softmax - y_softmax)
+      diff_softmax = tf.multiply(t1, t1)
+      self.reg_loss =  tf.reduce_sum(tf.reduce_max(diff_softmax, axis=1))
+      """
+      diff = self.model.x_input - self.model.x_nat
+      self.reg_loss = tf.reduce_sum(tf.multiply(diff, diff))
+      self.loss = tf.minimum(model.xent, vanilla_model.xent) - self.reg_loss
 
-      self.reg_loss = (tf.reduce_sum(tf.multiply(diff_softmax, diff_softmax)) /
-                    tf.reduce_sum(tf.multiply(y_softmax, y_softmax)))
-
-      self.loss = model.xent + vanilla_model.xent + self.reg_loss
     elif loss_func == 'cw':
       label_mask = tf.one_hot(model.y_input,
                               10,
@@ -145,7 +148,8 @@ class LinfPGDAttack:
       grad, l, y_cur, y_cur_vanilla, r_loss = sess.run([self.grad, self.loss, self.model.y_pred, self.vanilla_model.y_pred,
                                                         self.reg_loss],
                                                feed_dict = { self.model.x_input: p_x, self.model.x_input : x_r,
-                                                self.model.y_input: y, self.vanilla_model.y_input : y})
+                                                self.model.y_input: y, self.vanilla_model.y_input : y,
+                                                             self.model.x_nat : x_nat})
 
       acc          = 1.0 -  (np.sum(y_cur         == self.Y) / float(len(self.Y)))
       acc_vanilla  = 1.0 -  (np.sum(y_cur_vanilla == self.Y) / float(len(self.Y)))

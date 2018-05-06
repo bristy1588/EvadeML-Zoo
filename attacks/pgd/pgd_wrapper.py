@@ -30,7 +30,7 @@ class PGDModelWrapper:
         self.y_input = tf.argmax(y, 1)
         self.pre_softmax = model_logits(x)
         self.keras_model = keras_model
-
+        self.x_nat = tf.placeholder(tf.float32, shape=(None, 32, 32, 3))
         y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
             labels=self.y_input, logits=self.pre_softmax)
         self.xent = tf.reduce_sum(y_xent)
