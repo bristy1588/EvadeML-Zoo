@@ -1,6 +1,6 @@
 
 import warnings
-from .pgd_attack import LinfPGDAttack, CombinedLinfPGDAttack
+from .pgd_attack import CombinedLinfPGDAttackCIFAR10, LinfPGDAttack, CombinedLinfPGDAttack
 
 from keras.models import Model
 import tensorflow as tf

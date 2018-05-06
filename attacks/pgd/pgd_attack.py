@@ -46,10 +46,10 @@ class CombinedLinfPGDAttack:
     t1 = y1_softmax - vanilla_y_softmax
     t2 = y2_softmax - vanilla_y_softmax
     t3 = y3_softmax - vanilla_y_softmax
-    diff_softmax_1 = tf.nn.relu(tf.reduce_sum(tf.multiply(t1, t1), axis=1) - 1.40)
-    diff_softmax_2 = tf.nn.relu(tf.reduce_sum(tf.multiply(t2, t2), axis=1) - 1.40)
-    diff_softmax_3 = tf.nn.relu(tf.reduce_sum(tf.multiply(t3, t3), axis=1) - 1.40)
-    self.reg_loss = 500 * (tf.reduce_sum(diff_softmax_1) + tf.reduce_sum(diff_softmax_2) + tf.reduce_sum(diff_softmax_3)) 
+    diff_softmax_1 = tf.nn.relu(tf.reduce_sum(tf.multiply(t1, t1), axis=1) - 0.8)
+    diff_softmax_2 = tf.nn.relu(tf.reduce_sum(tf.multiply(t2, t2), axis=1) - 0.8)
+    diff_softmax_3 = tf.nn.relu(tf.reduce_sum(tf.multiply(t3, t3), axis=1) - 0.8)
+    self.reg_loss = 1000 * (tf.reduce_sum(diff_softmax_1) + tf.reduce_sum(diff_softmax_2) + tf.reduce_sum(diff_softmax_3)) 
     self.loss = model1.xent + model2.xent + model3.xent - self.reg_loss
     # (TODO) Need to add an regularizaton of some sort.
     if loss_func != 'xent':
@@ -65,17 +65,19 @@ class CombinedLinfPGDAttack:
       x = x_nat + np.random.uniform(-self.epsilon, self.epsilon, x_nat.shape)
     else:
       x = np.copy(x_nat)
-
+    
+    r_min = 100000.00
     max_acc = 0
     x_max = x
+    sel = 0
     for i in range(self.k):
       # Performing BPDA and EOT here
       x1 = self.sq1(reduce_precision_py(x, 256))
       x2 = self.sq2(reduce_precision_py(x, 256))
-      x3 = self.sq2(reduce_precision_py(x, 256))
-
+      x3 = self.sq3(reduce_precision_py(x, 256))
+ 
       grad, l, y_cur1, y_cur2, y_cur3, y_van, r_loss = sess.run([self.grad, self.loss, self.model1.y_pred, self.model2.y_pred,
-                                                  self.model3.y_pred, self.reg_loss], feed_dict={ self.model1.x_input: x1,
+                                                  self.model3.y_pred,self.vanilla_model.y_pred, self.reg_loss], feed_dict={ self.model1.x_input: x1,
                                                   self.model2.x_input: x2, self.model3.x_input: x3, self.vanilla_model.x_input: x1
                                                   , self.model1.y_input: y, self.model2.y_input: y, self.model3.y_input: y,
 						  self.vanilla_model.y_input: y })
@@ -86,16 +88,201 @@ class CombinedLinfPGDAttack:
       sq2_acc = 1 - np.sum(y_cur2 == self.Y)/(float(len(self.Y)))
       sq3_acc = 1 - np.sum(y_cur3 == self.Y)/(float(len(self.Y)))
       van_acc = 1 - np.sum(y_van  == self.Y)/(float(len(self.Y)))
+      min_acc = min(sq1_acc, sq2_acc, sq3_acc) 
       print("Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss)
       print("  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc, " Vanilla :", van_acc)
-      if min(sq1_acc, sq2_acc, sq3_acc) >= max_acc:
-        max_acc = min(sq1_acc, sq2_acc, sq3_acc)
-        x_max = np.copy(x)
+      if min_acc > 0.95 and r_loss < r_min:
+        r_min = r_loss
+	x_max = np.copy(x)
+        sel = i 
 
       x += self.a * np.sign(grad)
       x = np.clip(x, 0, 1)  # ensure valid pixel range
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
+   
+    print(" Selected i:", sel, " Reg Loss:", r_min)
+    #x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
+    return x_max
 
+
+# Optimizes for 3 models for now, could be extended into more.
+class CombinedLinfPGDAttackImageNet:
+  def __init__(self, model1, model2, model3, epsilon, k, a, random_start, loss_func, Y=None,
+               sq1 = lambda x:x, sq2 = lambda x:x, sq3 = lambda x:x):
+    """Attack parameter initialization. The attack performs k steps of
+       size a, while always staying within epsilon from the initial
+       point.
+       This simulatenously runs the Combined Linf attack for 4 models
+       """
+    self.model1 = model1
+    self.model2 = model2
+    self.model3 = model3
+    self.epsilon = epsilon
+    self.vanilla_model = model1   # Models 1,2 are bit-depth models 
+	
+    self.k = k
+    self.a = a
+    self.Y = np.argmax(Y, axis = 1) # Target Labels
+    self.rand = random_start
+
+    self.sq1 = sq1
+    self.sq2 = sq2
+    self.sq3 = sq3
+    
+    vanilla_y_softmax = tf.nn.softmax(self.vanilla_model.pre_softmax)
+    y1_softmax        = tf.nn.softmax(self.model1.pre_softmax)
+    y2_softmax        = tf.nn.softmax(self.model2.pre_softmax)
+    y3_softmax        = tf.nn.softmax(self.model3.pre_softmax) 
+    t1 = y1_softmax - vanilla_y_softmax
+    t2 = y2_softmax - vanilla_y_softmax
+    t3 = y3_softmax - vanilla_y_softmax
+    diff_softmax_1 = tf.nn.relu(tf.reduce_sum(tf.abs(t1), axis=1) - 1.2)
+    diff_softmax_2 = tf.nn.relu(tf.reduce_sum(tf.abs(t2), axis=1) - 1.2)
+    diff_softmax_3 = tf.nn.relu(tf.reduce_sum(tf.abs(t3), axis=1) - 1.2) 
+    max_vec = tf.maximum(tf.maximum(diff_softmax_1, diff_softmax_2), diff_softmax_3)
+    self.reg_loss = 1000 * tf.reduce_sum(max_vec)
+    self.loss = model1.xent + model2.xent + model3.xent - self.reg_loss
+    # (TODO) Need to add an regularizaton of some sort.
+    if loss_func != 'xent':
+      print('Unknown loss function. Defaulting to cross-entropy')
+
+    self.grad = (tf.gradients(self.loss, model1.x_input)[0] + tf.gradients(self.loss, model2.x_input)[0] \
+                 + tf.gradients(self.loss, model3.x_input)[0])
+
+  def perturb(self, x_nat, y, sess):
+    """Given a set of examples (x_nat, y), returns a set of adversarial
+       examples within epsilon of x_nat in l_infinity norm."""
+    if self.rand:
+      x = x_nat + np.random.uniform(-self.epsilon, self.epsilon, x_nat.shape)
+    else:
+      x = np.copy(x_nat)
+    
+    r_min = 100000.00
+    max_acc = 0
+    x_max = x
+    sel = 0
+    for i in range(self.k):
+      # Performing BPDA and EOT here
+      x1 = self.sq1(reduce_precision_py(x, 256))
+      x2 = self.sq2(reduce_precision_py(x, 256))
+      x3 = self.sq2(reduce_precision_py(x, 256))
+ 
+      grad, l, y_cur1, y_cur2, y_cur3, y_van, r_loss = sess.run([self.grad, self.loss, self.model1.y_pred, self.model2.y_pred,
+                                                  self.model3.y_pred,self.vanilla_model.y_pred, self.reg_loss], feed_dict={ self.model1.x_input: x1,
+                                                  self.model2.x_input: x2, self.model3.x_input: x3, self.vanilla_model.x_input: x1
+                                                  , self.model1.y_input: y, self.model2.y_input: y, self.model3.y_input: y,
+						  self.vanilla_model.y_input: y })
+
+
+
+      sq1_acc = 1 - np.sum(y_cur1 == self.Y)/(float(len(self.Y)))
+      sq2_acc = 1 - np.sum(y_cur2 == self.Y)/(float(len(self.Y)))
+      sq3_acc = 1 - np.sum(y_cur3 == self.Y)/(float(len(self.Y)))
+      van_acc = 1 - np.sum(y_van  == self.Y)/(float(len(self.Y)))
+      min_acc = min(sq1_acc, sq2_acc, sq3_acc) 
+      print("Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss)
+      print("  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc, " Vanilla :", van_acc)
+      if min_acc > 0.95 and r_loss < r_min:
+        r_min = r_loss
+	x_max = np.copy(x)
+        sel = i 
+
+      x += self.a * np.sign(grad)
+      x = np.clip(x, 0, 1)  # ensure valid pixel range
+      x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
+   
+    print(" Selected i:", sel, " Reg Loss:", r_min)
+    #x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
+    return x_max
+
+
+
+# Optimizes for 3 models for now, could be extended into more.
+class CombinedLinfPGDAttackCIFAR10:
+  def __init__(self, model1, model2, model3, epsilon, k, a, random_start, loss_func, Y=None,
+               sq1 = lambda x:x, sq2 = lambda x:x, sq3 = lambda x:x):
+    """Attack parameter initialization. The attack performs k steps of
+       size a, while always staying within epsilon from the initial
+       point.
+       This simulatenously runs the Combined Linf attack for 4 models
+       """
+    self.model1 = model1
+    self.model2 = model2
+    self.model3 = model3
+    self.epsilon = epsilon
+    self.vanilla_model = model1   # Models 1,2 are bit-depth models 
+	
+    self.k = k
+    self.a = a
+    self.Y = np.argmax(Y, axis = 1) # Target Labels
+    self.rand = random_start
+
+    self.sq1 = sq1
+    self.sq2 = sq2
+    self.sq3 = sq3
+    
+    vanilla_y_softmax = tf.nn.softmax(self.vanilla_model.pre_softmax)
+    y1_softmax        = tf.nn.softmax(self.model1.pre_softmax)
+    y2_softmax        = tf.nn.softmax(self.model2.pre_softmax)
+    y3_softmax        = tf.nn.softmax(self.model3.pre_softmax) 
+    t1 = y1_softmax - vanilla_y_softmax
+    t2 = y2_softmax - vanilla_y_softmax
+    t3 = y3_softmax - vanilla_y_softmax
+    diff_softmax_1 = tf.nn.relu(tf.reduce_sum(tf.multiply(t1, t1), axis=1) - 1.20)
+    diff_softmax_2 = tf.nn.relu(tf.reduce_sum(tf.multiply(t2, t2), axis=1) - 1.20)
+    diff_softmax_3 = tf.nn.relu(tf.reduce_sum(tf.multiply(t3, t3), axis=1) - 1.20)
+    self.reg_loss = 100 * (tf.reduce_sum(diff_softmax_1) + tf.reduce_sum(diff_softmax_2) + tf.reduce_sum(diff_softmax_3)) 
+    self.loss = model1.xent + model2.xent + model3.xent - self.reg_loss
+    # (TODO) Need to add an regularizaton of some sort.
+    if loss_func != 'xent':
+      print('Unknown loss function. Defaulting to cross-entropy')
+
+    self.grad = (tf.gradients(self.loss, model1.x_input)[0] + tf.gradients(self.loss, model2.x_input)[0] \
+                 + tf.gradients(self.loss, model3.x_input)[0])
+
+  def perturb(self, x_nat, y, sess):
+    """Given a set of examples (x_nat, y), returns a set of adversarial
+       examples within epsilon of x_nat in l_infinity norm."""
+    if self.rand:
+      x = x_nat + np.random.uniform(-self.epsilon, self.epsilon, x_nat.shape)
+    else:
+      x = np.copy(x_nat)
+    
+    r_min = 100000.00
+    max_acc = 0
+    x_max = x
+    sel = 0
+    for i in range(self.k):
+      # Performing BPDA and EOT here
+      x1 = self.sq1(reduce_precision_py(x, 256))
+      x2 = self.sq2(reduce_precision_py(x, 256))
+      x3 = self.sq2(reduce_precision_py(x, 256))
+ 
+      grad, l, y_cur1, y_cur2, y_cur3, y_van, r_loss = sess.run([self.grad, self.loss, self.model1.y_pred, self.model2.y_pred,
+                                                  self.model3.y_pred,self.vanilla_model.y_pred, self.reg_loss], feed_dict={ self.model1.x_input: x1,
+                                                  self.model2.x_input: x2, self.model3.x_input: x3, self.vanilla_model.x_input: x1
+                                                  , self.model1.y_input: y, self.model2.y_input: y, self.model3.y_input: y,
+						  self.vanilla_model.y_input: y })
+
+
+
+      sq1_acc = 1 - np.sum(y_cur1 == self.Y)/(float(len(self.Y)))
+      sq2_acc = 1 - np.sum(y_cur2 == self.Y)/(float(len(self.Y)))
+      sq3_acc = 1 - np.sum(y_cur3 == self.Y)/(float(len(self.Y)))
+      van_acc = 1 - np.sum(y_van  == self.Y)/(float(len(self.Y)))
+      min_acc = min(sq1_acc, sq2_acc, sq3_acc) 
+      print("Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss)
+      print("  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc, " Vanilla :", van_acc)
+      if min_acc > 0.95 and r_loss < r_min:
+        r_min = r_loss
+	x_max = np.copy(x)
+        sel = i 
+
+      x += self.a * np.sign(grad)
+      x = np.clip(x, 0, 1)  # ensure valid pixel range
+      x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
+   
+    print(" Selected i:", sel, " Reg Loss:", r_min)
     #x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
     return x_max
 
