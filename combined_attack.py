@@ -95,6 +95,7 @@ def main(argv=None):
     y = tf.placeholder(tf.float32, shape=(None, dataset.num_classes))
     sq_bit_depth =get_squeezer_by_name(FLAGS.bit_depth_filter, 'python')
     sq_median = lambda x : x   # Because the model compensates for this
+    print(" 8888 Non Local Filter ", FLAGS.non_local_filter)
     sq_non_local = get_squeezer_by_name(FLAGS.non_local_filter , 'python')
 
 
@@ -245,7 +246,7 @@ def main(argv=None):
         X_test_adv, aux_info = maybe_combined_generate_pgdli_examples(sess, model, model_median, model, x, y, X_test,
                                     Y_test_target, attack_params, use_cache = x_adv_fpath,
                                     verbose=FLAGS.verbose, attack_log_fpath=attack_log_fpath, sq1 = sq_bit_depth,
-                                    sq2 = sq_median, sq3 = sq_non_local)
+                                    sq2 = sq_median, sq3 = get_squeezer_by_name('non_local_means_color_13_3_2', 'python'))
 
         if FLAGS.clip > 0:
             # This is L-inf clipping.

@@ -10,7 +10,7 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 
-from utils.squeeze import reduce_precision_py
+from utils.squeeze import reduce_precision_py, get_squeezer_by_name 
 from robustness.feature_squeezing import FeatureSqueezingRC
 
 l2_dist = lambda x1,x2: np.sum((x1-x2)**2, axis=tuple(range(len(x1.shape))[1:]))
@@ -37,8 +37,8 @@ class CombinedLinfPGDAttack:
 
     self.sq1 = sq1
     self.sq2 = sq2
-    self.sq3 = sq3
-    
+    self.sq3 = sq3 
+ 
     vanilla_y_softmax = tf.nn.softmax(self.vanilla_model.pre_softmax)
     y1_softmax        = tf.nn.softmax(self.model1.pre_softmax)
     y2_softmax        = tf.nn.softmax(self.model2.pre_softmax)
@@ -87,10 +87,9 @@ class CombinedLinfPGDAttack:
       sq3_acc = 1 - np.sum(y_cur3 == self.Y)/(float(len(self.Y)))
       van_acc = 1 - np.sum(y_van  == self.Y)/(float(len(self.Y)))
       min_acc = min(sq1_acc, sq2_acc, sq3_acc)
-
-      print("Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss)
+      print("Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss, "----")
       print("  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc, " Vanilla :", van_acc)
-      if min_acc > 0.95 and r_loss < r_min:
+      if min_acc > 0.88 and r_loss < r_min:
         r_min = r_loss
         x_max = np.copy(x)
         sel = i 
@@ -126,7 +125,7 @@ class CombinedLinfPGDAttackImageNet:
 
     self.sq1 = sq1
     self.sq2 = sq2
-    self.sq3 = sq3
+    self.sq3 = get_squeezer_by_name('non_local_means_color_13_3_2', 'python') 
     
     vanilla_y_softmax = tf.nn.softmax(self.vanilla_model.pre_softmax)
     y1_softmax        = tf.nn.softmax(self.model1.pre_softmax)
@@ -135,9 +134,9 @@ class CombinedLinfPGDAttackImageNet:
     t1 = y1_softmax - vanilla_y_softmax
     t2 = y2_softmax - vanilla_y_softmax
     t3 = y3_softmax - vanilla_y_softmax
-    diff_softmax_1 = tf.nn.relu(tf.reduce_sum(tf.abs(t1), axis=1) - 1.2)
-    diff_softmax_2 = tf.nn.relu(tf.reduce_sum(tf.abs(t2), axis=1) - 1.2)
-    diff_softmax_3 = tf.nn.relu(tf.reduce_sum(tf.abs(t3), axis=1) - 1.2) 
+    diff_softmax_1 = tf.nn.relu(tf.reduce_sum(tf.abs(t1), axis=1) - 1.4)
+    diff_softmax_2 = tf.nn.relu(tf.reduce_sum(tf.abs(t2), axis=1) - 1.4)
+    diff_softmax_3 = tf.nn.relu(tf.reduce_sum(tf.abs(t3), axis=1) - 1.4) 
     max_vec = tf.maximum(tf.maximum(diff_softmax_1, diff_softmax_2), diff_softmax_3)
     self.reg_loss = 1000 * tf.reduce_sum(max_vec)
     self.loss = model1.xent + model2.xent + model3.xent - self.reg_loss
@@ -183,9 +182,13 @@ class CombinedLinfPGDAttackImageNet:
       van_acc = 1 - np.sum(y_van == self.Y) / (float(len(self.Y)))
       min_acc = min(sq1_acc, sq2_acc, sq3_acc)
 
-      print("Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss)
-      print("  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc, " Vanilla :", van_acc)
-      if min_acc > 0.95 and r_loss < r_min:
+      rc = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=non_local_means_color_13_3_2")
+      y_rc = np.argmax(rc.predict(x_van), axis=1)
+      rc_acc = 1 - np.sum(y_rc == self.Y)/ (float(len(self.Y)))
+      print("Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss, "----")
+      print("  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc, " Vanilla :", van_acc,
+              "RC acc: ", rc_acc)
+      if min_acc > 0.85 and r_loss < r_min:
         r_min = r_loss
         x_max = np.copy(x)
         sel = i
