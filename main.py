@@ -84,13 +84,14 @@ def main(argv=None):
     x = tf.placeholder(tf.float32, shape=(None, dataset.image_size, dataset.image_size, dataset.num_channels))
     y = tf.placeholder(tf.float32, shape=(None, dataset.num_classes))
 
-    with tf.variable_scope(FLAGS.model_name):
+    with tf.variable_scope(FLAGS.model_name ):
         """
         Create a model instance for prediction.
         The scaling argument, 'input_range_type': {1: [0,1], 2:[-0.5, 0.5], 3:[-1, 1]...}
         """
         model = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1)
         model.compile(loss='categorical_crossentropy',optimizer='sgd', metrics=['acc'])
+
 
         # Small Optimization for faster testing
     if FLAGS.dataset_name != "ImageNet":

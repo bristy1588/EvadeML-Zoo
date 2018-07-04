@@ -30,7 +30,7 @@ def get_densenet_weights_path(dataset_name="CIFAR-10", include_top=True):
     return weights_path
 
 
-def densenet_cifar10_model(logits=False, input_range_type=1, pre_filter=lambda x:x):
+def densenet_cifar10_model(logits=False, input_range_type=1, pre_filter=lambda x:x, m_name='dense_net'):
     assert input_range_type == 1
 
     batch_size = 64
@@ -79,7 +79,8 @@ def densenet_cifar10_model(logits=False, input_range_type=1, pre_filter=lambda x
     else:
         inputs = img_input
     # Create model.
-    model = Model(inputs, x, name='densenet')
+    print(" LOG:: Creating Model Name::", m_name)
+    model = Model(inputs, x, name=m_name)
     return model
 
 

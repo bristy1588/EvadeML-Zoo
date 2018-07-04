@@ -28,14 +28,12 @@ flags.DEFINE_string('dataset_name', 'MNIST', 'Supported: MNIST, CIFAR-10, ImageN
 flags.DEFINE_string('model_name', 'cleverhans', 'Supported: cleverhans, cleverhans_adv_trained and carlini for MNIST; carlini and DenseNet for CIFAR-10;  ResNet50, VGG19, Inceptionv3 and MobileNet for ImageNet.')
 
 flags.DEFINE_boolean('select', True, 'Select correctly classified examples for the experiement.')
-flags.DEFINE_integer('nb_examples', 100, 'The number of examples selected for attacks.')
+flags.DEFINE_integer('nb_examples', 10, 'The number of examples selected for attacks.')
 flags.DEFINE_boolean('balance_sampling', False, 'Select the same number of examples for each class.')
 flags.DEFINE_boolean('test_mode', False, 'Only select one sample for each class.')
 
 flags.DEFINE_string('attacks', "FGSM?eps=0.1;BIM?eps=0.1&eps_iter=0.02;JSMA?targeted=next;CarliniL2?targeted=next&batch_size=100&max_iterations=1000;CarliniL2?targeted=next&batch_size=100&max_iterations=1000&confidence=2", 'Attack name and parameters in URL style, separated by semicolon.')
 flags.DEFINE_float('clip', -1, 'L-infinity clip on the adversarial perturbations.')
-flags.DEFINE_boolean('visualize', True, 'Output the image examples for each attack, enabled by default.')
-
 flags.DEFINE_string('robustness', '', 'Supported: FeatureSqueezing.')
 
 
@@ -48,6 +46,7 @@ flags.DEFINE_boolean('verbose', False, 'Stdout level. The hidden content will be
 
 flags.DEFINE_string('detection', '', 'Supported: feature_squeezing.')
 flags.DEFINE_boolean('detection_train_test_mode', True, 'Split into train/test datasets.')
+flags.DEFINE_boolean('visualize', True, 'Output the image examples for each attack, enabled by default.')
 
 
 FLAGS.model_name = FLAGS.model_name.lower()
@@ -93,34 +92,65 @@ def main(argv=None):
     # Define input TF placeholder
     x = tf.placeholder(tf.float32, shape=(None, dataset.image_size, dataset.image_size, dataset.num_channels))
     y = tf.placeholder(tf.float32, shape=(None, dataset.num_classes))
-    sq_bit_depth =get_squeezer_by_name(FLAGS.bit_depth_filter, 'python')
-    sq_median = lambda x : x   # Because the model compensates for this
-    print(" 8888 Non Local Filter ", FLAGS.non_local_filter)
+    sq_bit_depth = get_squeezer_by_name(FLAGS.bit_depth_filter, 'python')
+    sq_median = lambda x : x     # Because the model compensates for this
     sq_non_local = get_squeezer_by_name(FLAGS.non_local_filter , 'python')
 
-
-    with tf.variable_scope(FLAGS.model_name):
+    with tf.variable_scope(FLAGS.model_name + "vanilla"):
         """
         Create a model instance for prediction 
         The scaling argument, 'input_range_type': {1: [0,1], 2:[-0.5, 0.5], 3:[-1, 1]...}
         """
         # Model considering Adaptive Attacks
-        model = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1)
+        model_vanilla = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1, m_name="vanilla")
+        model_vanilla.compile(loss='categorical_crossentropy', optimizer='sgd', metrics=['acc'])
+
+    with tf.variable_scope(FLAGS.model_name + "bitdepth"):
+        """
+        Create a model instance for prediction 
+        The scaling argument, 'input_range_type': {1: [0,1], 2:[-0.5, 0.5], 3:[-1, 1]...}
+        """
+        # Model considering Adaptive Attacks
+        model_bit_depth = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1, m_name="bit_depth")
+        model_bit_depth.compile(loss='categorical_crossentropy',optimizer='sgd', metrics=['acc'])
+
+    with tf.variable_scope(FLAGS.model_name + "median"):
+        """
+        Create a model instance for prediction 
+        The scaling argument, 'input_range_type': {1: [0,1], 2:[-0.5, 0.5], 3:[-1, 1]...}
+        """
+        # Model considering Adaptive Attacks
+
         model_median = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1,
-                                           pre_filter = get_squeezer_by_name(FLAGS.median_filter, 'tensorflow'))
-        model.compile(loss='categorical_crossentropy',optimizer='sgd', metrics=['acc'])
+                                                  pre_filter=get_squeezer_by_name(FLAGS.median_filter, 'tensorflow'), m_name= "median")
+        model_median.compile(loss='categorical_crossentropy', optimizer='sgd', metrics=['acc'])
+
+    with tf.variable_scope(FLAGS.model_name + "nonlocal"):
+        """
+        Create a model instance for prediction 
+        The scaling argument, 'input_range_type': {1: [0,1], 2:[-0.5, 0.5], 3:[-1, 1]...}
+        """
+        # Model considering Adaptive Attacks
+        model_non_local = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1, m_name="nonlocal")
+        model_non_local.compile(loss='categorical_crossentropy', optimizer='sgd', metrics=['acc'])
+
+
+    if (model_vanilla == model_bit_depth):
+        print (" Bristy !! The two models are referencing the same thing :(")
 
     # Small Optimization for faster testing
     if FLAGS.dataset_name != "ImageNet":
-        prelim_ids =  np.array(range(FLAGS.nb_examples * 4))
+        prelim_ids =  np.array(range(FLAGS.nb_examples))
         X_test_all, Y_test_all = X_test_all[prelim_ids], Y_test_all[prelim_ids]
 
     # 3. Evaluate the trained model.
     # TODO: add top-5 accuracy for ImageNet.
     print ("Evaluating the pre-trained model...")
 
+    # Bit Depth and Non Local are the vanilla models
+
     # We use the Vanilla Model here for Prediction
-    Y_pred_all = model.predict(X_test_all)
+    Y_pred_all = model_bit_depth.predict(X_test_all)
     mean_conf_all = calculate_mean_confidence(Y_pred_all, Y_test_all)
     accuracy_all = calculate_accuracy(Y_pred_all, Y_test_all)
     print('Test accuracy on raw legitimate examples %.4f' % (accuracy_all))
@@ -243,10 +273,11 @@ def main(argv=None):
 
         # Note that we use the attack model here instead of the vanilla model
         # Note that we pass in the Squeezer function for BPDA
-        X_test_adv, aux_info = maybe_combined_generate_pgdli_examples(sess, model, model_median, model, x, y, X_test,
+        X_test_adv, aux_info = maybe_combined_generate_pgdli_examples(sess, model_vanilla,
+                                    model_bit_depth, model_median, model_non_local, x, y, X_test,
                                     Y_test_target, attack_params, use_cache = x_adv_fpath,
                                     verbose=FLAGS.verbose, attack_log_fpath=attack_log_fpath, sq1 = sq_bit_depth,
-                                    sq2 = sq_median, sq3 = get_squeezer_by_name('non_local_means_color_13_3_2', 'python'))
+                                    sq2 = sq_median, sq3 = sq_non_local )
 
         if FLAGS.clip > 0:
             # This is L-inf clipping.
@@ -262,7 +293,7 @@ def main(argv=None):
         dur_per_sample = duration / len(X_test_adv)
 
         # 5.0 Output predictions.
-        Y_test_adv_pred = model.predict(X_test_adv)
+        Y_test_adv_pred = model_bit_depth.predict(X_test_adv)
         predictions_fpath = os.path.join(predictions_folder, "%s.npy" % attack_string)
         np.save(predictions_fpath, Y_test_adv_pred, allow_pickle=False)
 
@@ -271,7 +302,7 @@ def main(argv=None):
         # All data should be discretized to uint8.
         X_test_adv_discret = reduce_precision_py(X_test_adv, 256)
         X_test_adv_discretized_list.append(X_test_adv_discret)
-        Y_test_adv_discret_pred = model.predict(X_test_adv_discret)
+        Y_test_adv_discret_pred = model_bit_depth.predict(X_test_adv_discret)
         Y_test_adv_discretized_pred_list.append(Y_test_adv_discret_pred)
 
         # Y_test_adv_discret_pred is for the vanilla model
@@ -322,7 +353,7 @@ def main(argv=None):
         from robustness import evaluate_robustness
         result_folder_robustness = os.path.join(FLAGS.result_folder, "robustness")
         fname_prefix = "%s_%s_robustness" % (task_id, attack_string_hash)
-        evaluate_robustness(FLAGS.robustness, model, Y_test_all, X_test_all, Y_test, \
+        evaluate_robustness(FLAGS.robustness, model_bit_depth, Y_test_all, X_test_all, Y_test, \
                             attack_string_list, X_test_adv_discretized_list,
                             fname_prefix, selected_idx_vis, result_folder_robustness)
 
@@ -333,8 +364,8 @@ def main(argv=None):
 
         result_folder_detection = os.path.join(FLAGS.result_folder, "detection")
         csv_fname = "%s_attacks_%s_detection.csv" % (task_id, attack_string_hash)
-        de = DetectionEvaluator(model, result_folder_detection, csv_fname, FLAGS.dataset_name)
-        Y_test_all_pred = model.predict(X_test_all)
+        de = DetectionEvaluator(model_bit_depth, result_folder_detection, csv_fname, FLAGS.dataset_name)
+        Y_test_all_pred = model_bit_depth.predict(X_test_all)
         de.build_detection_dataset(X_test_all, Y_test_all, Y_test_all_pred, selected_idx,
                                    X_test_adv_discretized_list, Y_test_adv_discretized_pred_list,
                                    attack_string_list, attack_string_hash, FLAGS.clip,

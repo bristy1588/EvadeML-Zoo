@@ -204,9 +204,9 @@ class CombinedLinfPGDAttackImageNet:
 
 
 # Optimizes for 3 models for now, could be extended into more.
-class CombinedLinfPGDAttackCIFAR10:
-  def __init__(self, model1, model2, model3, epsilon, k, a, random_start, loss_func, Y=None,
-               sq1 = lambda x:x, sq2 = lambda x:x, sq3 = lambda x:x):
+class CombinedLinfPGDAttackCIFAR10OLD:
+  def __init__(self, model_vanilla, model1, model2, model3, epsilon, k, a, random_start, loss_func, Y,
+               sq1, sq2 , sq3):
     """Attack parameter initialization. The attack performs k steps of
        size a, while always staying within epsilon from the initial
        point.
@@ -216,27 +216,33 @@ class CombinedLinfPGDAttackCIFAR10:
     self.model2 = model2
     self.model3 = model3
     self.epsilon = epsilon
-    self.vanilla_model = model1   # Models 1,2 are bit-depth models 
-	
+    self.vanilla_model = model_vanilla
+
     self.k = k
     self.a = a
     self.Y = np.argmax(Y, axis = 1) # Target Labels
     self.rand = random_start
 
     self.sq1 = sq1
-    self.sq2 = sq2
+    self.sq2 = sq2  # This is just identity
     self.sq3 = sq3
-    
+
+    self.rc1 = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=bit_depth_5")
+    self.rc2 = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=median_filter_2_2")
+    self.rc3 = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=non_local_means_color_13_3_2")
+
     vanilla_y_softmax = tf.nn.softmax(self.vanilla_model.pre_softmax)
     y1_softmax        = tf.nn.softmax(self.model1.pre_softmax)
     y2_softmax        = tf.nn.softmax(self.model2.pre_softmax)
-    y3_softmax        = tf.nn.softmax(self.model3.pre_softmax) 
+    y3_softmax        = tf.nn.softmax(self.model3.pre_softmax)
     t1 = y1_softmax - vanilla_y_softmax
     t2 = y2_softmax - vanilla_y_softmax
     t3 = y3_softmax - vanilla_y_softmax
     diff_softmax_1 = tf.nn.relu(tf.reduce_sum(tf.multiply(t1, t1), axis=1) - 1.20)
     diff_softmax_2 = tf.nn.relu(tf.reduce_sum(tf.multiply(t2, t2), axis=1) - 1.20)
     diff_softmax_3 = tf.nn.relu(tf.reduce_sum(tf.multiply(t3, t3), axis=1) - 1.20)
+
+
     self.reg_loss = 100 * (tf.reduce_sum(diff_softmax_1) + tf.reduce_sum(diff_softmax_2) + tf.reduce_sum(diff_softmax_3)) 
     self.loss = model1.xent + model2.xent + model3.xent - self.reg_loss
     # (TODO) Need to add an regularizaton of some sort.
@@ -260,10 +266,14 @@ class CombinedLinfPGDAttackCIFAR10:
     sel = 0
     for i in range(self.k):
       # Performing BPDA and EOT here
-      x1 = self.sq1(reduce_precision_py(x, 256))
-      x2 = self.sq2(reduce_precision_py(x, 256))
-      x3 = self.sq3(reduce_precision_py(x, 256))
       x_van = reduce_precision_py(x, 256)
+      x1 = self.sq1(x_van)
+      x2 = self.sq2(x_van)
+      x3 = self.sq3(x_van)
+
+      if np.array_equal(x1, x3) == True or np.array_equal(x1, x_van)== True:
+        print(" Problem with the squeezer")
+
       grad, l, y_cur1, y_cur2, y_cur3, y_van, r_loss = sess.run([self.grad, self.loss, self.model1.y_pred,
                                                                  self.model2.y_pred, self.model3.y_pred,
                                                                  self.vanilla_model.y_pred, self.reg_loss],
@@ -275,15 +285,73 @@ class CombinedLinfPGDAttackCIFAR10:
                                                                              y, self.model3.y_input: y,
                                                                            self.vanilla_model.y_input: y})
 
+      van_bit = sess.run([self.vanilla_model.y_pred], feed_dict={self.vanilla_model.x_input: x1,
+                                                                           self.vanilla_model.y_input: y})
+      van_local = sess.run([self.vanilla_model.y_pred], feed_dict={self.vanilla_model.x_input: x3,
+                                                                 self.vanilla_model.y_input: y})
+
+      bit1 = sess.run([self.model1.y_pred], feed_dict={self.model1.x_input: x1,
+                                                                 self.model1.y_input: y})
+      local1 = sess.run([self.model3.y_pred], feed_dict={self.model3.x_input: x3,
+                                                                   self.model3.y_input: y})
+
       sq1_acc = 1 - np.sum(y_cur1 == self.Y) / (float(len(self.Y)))
       sq2_acc = 1 - np.sum(y_cur2 == self.Y) / (float(len(self.Y)))
       sq3_acc = 1 - np.sum(y_cur3 == self.Y) / (float(len(self.Y)))
       van_acc = 1 - np.sum(y_van == self.Y) / (float(len(self.Y)))
       min_acc = min(sq1_acc, sq2_acc, sq3_acc)
 
+
+      # Let's first check if the models are outputting things correctly
+
+
+      y_rc1 = np.argmax(self.rc1.predict(x_van), axis=1)
+      y_rc2 = np.argmax(self.rc2.predict(x_van), axis=1)
+      y_rc3 = np.argmax(self.rc3.predict(x_van), axis=1)
+
+      sq1_acc_rc = 1 - np.sum(y_rc1 == self.Y) / (float(len(self.Y)))
+      sq2_acc_rc = 1 - np.sum(y_rc2 == self.Y) / (float(len(self.Y)))
+      sq3_acc_rc = 1 - np.sum(y_rc3 == self.Y) / (float(len(self.Y)))
+
       print("Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss)
-      print("  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc, " Vanilla :", van_acc)
-      if min_acc > 0.95 and r_loss < r_min:
+      print(" With MY Classifiers     ==  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc, " Vanilla :", van_acc)
+      print(" With Robust Classifiers ==  Bit Depth: ", sq1_acc_rc, " Median Depth: ", sq2_acc_rc, " Non local means:", sq3_acc_rc )
+
+      if np.array_equal(van_bit, van_local) == True and np.array_equal(y_rc1, y_rc3) == False:
+        print (" ALERT Vanilla different squeezers are the same ")
+      if np.array_equal(y_cur1, y_cur3) == True and np.array_equal(y_cur1, y_van):
+        print (" ALERT MY CLASSIFIER has gone NUTs, Bit depth, non_local and vanilla are the same")
+
+      if np.array_equal(van_bit, y_cur1) == False:
+        print(" Error! Vanilla and My Classifier Differ for Bit Depth ")
+      if np.array_equal(van_local,y_cur3) == False:
+        print(" Error! Vanilla and My Classifier Differ for Non Local Means")
+
+      if np.array_equal(van_bit, y_rc1) == False:
+        print(" Error!  Robust Classifier and Vanilla Differ for Bit Depth ")
+      if np.array_equal(van_local,y_rc3) == False:
+        print(" Error! Robust Classifier and Vanilla and Differ for Non Local Means")
+
+      if np.array_equal(y_van, van_bit ) == True:
+        print("Error! HOLY FAAAK : Bit Depth and Vanilla are same ")
+      if np.array_equal(y_van, van_local) == True:
+        print(" Error! HOLY FAAAK  : Non Local Squeezer and Vanilla are same ")
+
+      if np.array_equal(y_cur1, bit1) == False:
+        print("Error! HOLY FAAAK  2: Bit Depth Squeezer Behaves weirdly ")
+      if np.array_equal(y_cur3, local1) == False:
+        print(" Error! HOLY FAAAK  2: Non Local Squeezer Behaves Weiredly ")
+
+
+
+      if np.array_equal(y_rc1, y_cur1) == False:
+        print(" OMG !!! :o !!!! Bit Depth Mismatch")
+      if np.array_equal(y_rc2, y_cur2) == False:
+        print(" OMG !!! :o !!!! Median Mismatch")
+      if np.array_equal(y_rc3, y_cur3) == False:
+        print(" OMG !!! :o !!!! Non Local Mismatch ")
+
+      if min_acc > 0.90 and r_loss < r_min:
         r_min = r_loss
         x_max = np.copy(x)
         sel = i
@@ -296,6 +364,101 @@ class CombinedLinfPGDAttackCIFAR10:
     # x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
     return x_max
 
+
+class CombinedLinfPGDAttackCIFAR10:
+  def __init__(self, model_vanilla, model1, model2, model3, epsilon, k, a, random_start, loss_func, Y,
+               sq1, sq2, sq3):
+    """Attack parameter initialization. The attack performs k steps of
+       size a, while always staying within epsilon from the initial
+       point.
+       This simulatenously runs the Combined Linf attack for 4 models
+       """
+    self.vanilla_model = model_vanilla
+    self.median_model = model1  # Trying out bitdepth
+
+    self.k = k
+    self.a = a
+    self.Y = np.argmax(Y, axis=1)  # Target Labels
+    self.rand = random_start
+    self.epsilon = epsilon
+
+    self.sq_bit = sq1
+    self.sq_local = sq3
+
+    self.rc_bit  = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=bit_depth_5")
+    self.rc_median = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=median_filter_2_2")
+    self.rc_local = FeatureSqueezingRC(self.vanilla_model.keras_model,
+                                  "FeatureSqueezing?squeezer=non_local_means_color_13_3_2")
+
+    self.vanilla_y_softmax = tf.nn.softmax(self.vanilla_model.pre_softmax)
+    self.median_y_softmax = tf.nn.softmax( self.median_model.pre_softmax)
+    self.t = self.vanilla_y_softmax - self.median_y_softmax
+    self.diff_softmax = tf.nn.relu(tf.reduce_sum(tf.multiply(self.t, self.t), axis=1) - 1.0)
+    self.reg_loss = 30 * tf.reduce_sum(self.diff_softmax)
+
+
+    if loss_func != 'xent':
+      print('Unknown loss function. Defaulting to cross-entropy')
+
+    self.loss = self.vanilla_model.xent + self.median_model.xent + self.reg_loss
+
+    self.grad = tf.gradients(self.loss, self.median_model.x_input)[0]
+
+  def perturb(self, x_nat, y, sess):
+    """Given a set of examples (x_nat, y), returns a set of adversarial
+       examples within epsilon of x_nat in l_infinity norm."""
+    if self.rand:
+      x = x_nat + np.random.uniform(-self.epsilon, self.epsilon, x_nat.shape)
+    else:
+      x = np.copy(x_nat)
+
+    r_min = 100000.00
+    max_acc = 0
+    x_max = x
+    sel = 0
+    for i in range(self.k):
+      # Performing BPDA
+      x_van = reduce_precision_py(x, 256)
+      x_sq_bit = self.sq_bit(x_van)
+      x_sq_local = self.sq_local(x_van)
+
+
+      if np.array_equal(x_van, x_sq_bit) == True or np.array_equal(x_sq_local, x_van) == True:
+        print(" Problem with the squeezer")
+
+      grad, l, y_vanilla, y_median, r_loss = sess.run([self.grad, self.loss, self.vanilla_model.y_pred,
+                                                       self.median_model.y_pred, self.reg_loss],
+                                                      feed_dict={self.vanilla_model.x_input: x_van,
+                                                                 self.median_model.x_input: x_sq_bit,
+                                                                 self.vanilla_model.y_input: y,
+                                                                 self.median_model.y_input: y})
+      y_robust_median = np.argmax(self.rc_bit.predict(x_van), axis=1)
+
+      median_accuracy        = 1 - np.sum(y_median == self.Y) / (float(len(self.Y)))
+      vanilla_accuracy       = 1 - np.sum(y_vanilla == self.Y) / (float(len(self.Y)))
+      robust_median_accuracy = 1 - np.sum(y_robust_median == self.Y) / (float(len(self.Y)))
+
+      print("======  Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss)
+      tempilate = ('Vanilla Accuracy: ({:.3}%)   Median Accuracy: ({:.3f}%)  Robust Median Accuracy ({:.3f}%)')
+      print(tempilate.format(vanilla_accuracy,  median_accuracy, robust_median_accuracy))
+
+      #print(" Diff Vector:", y_robust_median - y_median)
+
+      if np.array_equal(y_robust_median, y_median) == False:
+        print(" [ERROR] Median Model predictions differ from Robust Classifier Median")
+
+      if median_accuracy >= 0.90 and r_loss < r_min:
+        r_min = r_loss
+        x_max = np.copy(x)
+        sel = i
+
+      x += self.a * np.sign(grad)
+      x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
+      x = np.clip(x, 0, 1)  # ensure valid pixel range
+
+    print(" Selected i:", sel, " Reg Loss:", r_min)
+    # x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
+    return x_max
 
 
 class LinfPGDAttack:
@@ -378,6 +541,8 @@ class LinfPGDAttack:
       print("Itr: ", i, " Loss: ", l, " Accuracy: ", acc, " Vanilla Acc:", acc_vanilla, " Reg Loss:", r_loss)
 
     return x_max
+
+
 
 
 if __name__ == '__main__':
