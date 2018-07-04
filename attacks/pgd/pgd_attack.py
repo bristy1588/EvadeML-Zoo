@@ -374,7 +374,7 @@ class CombinedLinfPGDAttackCIFAR10:
        This simulatenously runs the Combined Linf attack for 4 models
        """
     self.vanilla_model = model_vanilla
-    self.median_model = model1  # Trying out bitdepth
+    self.median_model = model2  # Trying out bitdepth
 
     self.k = k
     self.a = a
