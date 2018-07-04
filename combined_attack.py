@@ -150,7 +150,7 @@ def main(argv=None):
     # Bit Depth and Non Local are the vanilla models
 
     # We use the Vanilla Model here for Prediction
-    Y_pred_all = model_bit_depth.predict(X_test_all)
+    Y_pred_all = model_vanilla.predict(X_test_all)
     mean_conf_all = calculate_mean_confidence(Y_pred_all, Y_test_all)
     accuracy_all = calculate_accuracy(Y_pred_all, Y_test_all)
     print('Test accuracy on raw legitimate examples %.4f' % (accuracy_all))
@@ -293,7 +293,7 @@ def main(argv=None):
         dur_per_sample = duration / len(X_test_adv)
 
         # 5.0 Output predictions.
-        Y_test_adv_pred = model_bit_depth.predict(X_test_adv)
+        Y_test_adv_pred = model_vanilla.predict(X_test_adv)
         predictions_fpath = os.path.join(predictions_folder, "%s.npy" % attack_string)
         np.save(predictions_fpath, Y_test_adv_pred, allow_pickle=False)
 
@@ -302,7 +302,7 @@ def main(argv=None):
         # All data should be discretized to uint8.
         X_test_adv_discret = reduce_precision_py(X_test_adv, 256)
         X_test_adv_discretized_list.append(X_test_adv_discret)
-        Y_test_adv_discret_pred = model_bit_depth.predict(X_test_adv_discret)
+        Y_test_adv_discret_pred = model_vanilla.predict(X_test_adv_discret)
         Y_test_adv_discretized_pred_list.append(Y_test_adv_discret_pred)
 
         # Y_test_adv_discret_pred is for the vanilla model
@@ -353,7 +353,7 @@ def main(argv=None):
         from robustness import evaluate_robustness
         result_folder_robustness = os.path.join(FLAGS.result_folder, "robustness")
         fname_prefix = "%s_%s_robustness" % (task_id, attack_string_hash)
-        evaluate_robustness(FLAGS.robustness, model_bit_depth, Y_test_all, X_test_all, Y_test, \
+        evaluate_robustness(FLAGS.robustness, model_vanilla, Y_test_all, X_test_all, Y_test, \
                             attack_string_list, X_test_adv_discretized_list,
                             fname_prefix, selected_idx_vis, result_folder_robustness)
 
@@ -364,8 +364,8 @@ def main(argv=None):
 
         result_folder_detection = os.path.join(FLAGS.result_folder, "detection")
         csv_fname = "%s_attacks_%s_detection.csv" % (task_id, attack_string_hash)
-        de = DetectionEvaluator(model_bit_depth, result_folder_detection, csv_fname, FLAGS.dataset_name)
-        Y_test_all_pred = model_bit_depth.predict(X_test_all)
+        de = DetectionEvaluator(model_vanilla, result_folder_detection, csv_fname, FLAGS.dataset_name)
+        Y_test_all_pred = model_vanilla.predict(X_test_all)
         de.build_detection_dataset(X_test_all, Y_test_all, Y_test_all_pred, selected_idx,
                                    X_test_adv_discretized_list, Y_test_adv_discretized_pred_list,
                                    attack_string_list, attack_string_hash, FLAGS.clip,

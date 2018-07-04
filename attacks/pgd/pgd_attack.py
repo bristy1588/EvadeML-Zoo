@@ -429,10 +429,10 @@ class CombinedLinfPGDAttackCIFAR10:
       grad, l, y_vanilla, y_median, r_loss = sess.run([self.grad, self.loss, self.vanilla_model.y_pred,
                                                        self.median_model.y_pred, self.reg_loss],
                                                       feed_dict={self.vanilla_model.x_input: x_van,
-                                                                 self.median_model.x_input: x_sq_bit,
+                                                                 self.median_model.x_input:  x_van,
                                                                  self.vanilla_model.y_input: y,
                                                                  self.median_model.y_input: y})
-      y_robust_median = np.argmax(self.rc_bit.predict(x_van), axis=1)
+      y_robust_median = np.argmax(self.rc_median.predict(x), axis=1)
 
       median_accuracy        = 1 - np.sum(y_median == self.Y) / (float(len(self.Y)))
       vanilla_accuracy       = 1 - np.sum(y_vanilla == self.Y) / (float(len(self.Y)))

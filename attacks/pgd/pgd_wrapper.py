@@ -98,9 +98,9 @@ class CombinedPGDModelWrapper:
 
 
 def combined_generate_pgdli_examples(sess, model_vanilla,  model1, model2, model3,  x, y, X, Y, attack_params, sq1,sq2,sq3):
-    model_1_for_pgd = PGDModelWrapper(model1, x, y, file_name="Bit_depth.png")
-    model_2_for_pgd = PGDModelWrapper(model2, x, y, file_name="Bit_depth.png")
-    model_3_for_pgd = PGDModelWrapper(model3, x, y, file_name="Bit_depth.png")
+    model_1_for_pgd = PGDModelWrapper(model1, x, y)
+    model_2_for_pgd = PGDModelWrapper(model2, x, y)
+    model_3_for_pgd = PGDModelWrapper(model3, x, y)
     model_vanilla_for_pgd = PGDModelWrapper(model_vanilla, x, y)
 
     params = {'model1': model_1_for_pgd,  'model2': model_2_for_pgd,'model3': model_3_for_pgd, 'epsilon': 0.3,
