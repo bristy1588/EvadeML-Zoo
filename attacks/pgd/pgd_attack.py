@@ -405,7 +405,8 @@ class CombinedLinfPGDAttackCIFAR10:
 
     self.loss = self.vanilla_model.xent + self.median_model.xent + self.reg_loss
 
-    self.grad = tf.gradients(self.loss, self.median_model.x_input)[0]
+    self.grad = tf.gradients(self.loss, self.median_model.x_input)[0] + \
+                tf.gradients(self.loss, self.vanilla_model.x_input)[0]
 
   def perturb(self, x_nat, y, sess):
     """Given a set of examples (x_nat, y), returns a set of adversarial
@@ -454,6 +455,7 @@ class CombinedLinfPGDAttackCIFAR10:
         print(" [ERROR] Median Model predictions differ from Robust Classifier Median")
 
       if median_accuracy >= 0.90 and r_loss < r_min:
+        self.a = 0.001
         r_min = r_loss
         x_max = np.copy(x)
         sel = i
