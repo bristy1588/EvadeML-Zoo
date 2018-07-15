@@ -374,7 +374,9 @@ class CombinedLinfPGDAttackCIFAR10:
        This simulatenously runs the Combined Linf attack for 4 models
        """
     self.vanilla_model = model_vanilla
-    self.median_model = model2  # Trying out bitdepth
+    self.median_model = model2
+
+
 
     self.k = k
     self.a = a
@@ -393,8 +395,9 @@ class CombinedLinfPGDAttackCIFAR10:
     self.vanilla_y_softmax = tf.nn.softmax(self.vanilla_model.pre_softmax)
     self.median_y_softmax = tf.nn.softmax( self.median_model.pre_softmax)
     self.t = self.vanilla_y_softmax - self.median_y_softmax
-    self.diff_softmax = tf.nn.relu(tf.reduce_sum(tf.multiply(self.t, self.t), axis=1) - 1.0)
-    self.reg_loss = 30 * tf.reduce_sum(self.diff_softmax)
+    self.diff_softmax = tf.nn.relu(tf.reduce_sum(tf.multiply(self.t, self.t), axis=1) - 1.2)
+    # Need to normalize this
+    self.reg_loss = 100 * tf.reduce_sum(self.diff_softmax)
 
 
     if loss_func != 'xent':
@@ -416,6 +419,7 @@ class CombinedLinfPGDAttackCIFAR10:
     max_acc = 0
     x_max = x
     sel = 0
+
     for i in range(self.k):
       # Performing BPDA
       x_van = reduce_precision_py(x, 256)
@@ -432,7 +436,8 @@ class CombinedLinfPGDAttackCIFAR10:
                                                                  self.median_model.x_input:  x_van,
                                                                  self.vanilla_model.y_input: y,
                                                                  self.median_model.y_input: y})
-      y_robust_median = np.argmax(self.rc_median.predict(x), axis=1)
+      y_robust_median = np.argmax(self.rc_median.predict(x_van), axis=1)
+
 
       median_accuracy        = 1 - np.sum(y_median == self.Y) / (float(len(self.Y)))
       vanilla_accuracy       = 1 - np.sum(y_vanilla == self.Y) / (float(len(self.Y)))
@@ -440,9 +445,10 @@ class CombinedLinfPGDAttackCIFAR10:
 
       print("======  Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss)
       tempilate = ('Vanilla Accuracy: ({:.3}%)   Median Accuracy: ({:.3f}%)  Robust Median Accuracy ({:.3f}%)')
+
       print(tempilate.format(vanilla_accuracy,  median_accuracy, robust_median_accuracy))
 
-      #print(" Diff Vector:", y_robust_median - y_median)
+      print(" !!![ Total Disagreements ]:", np.sum(np.absolute(y_median - y_robust_median)))
 
       if np.array_equal(y_robust_median, y_median) == False:
         print(" [ERROR] Median Model predictions differ from Robust Classifier Median")
