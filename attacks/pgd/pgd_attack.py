@@ -568,7 +568,7 @@ class CombinedLinfPGDAttackCIFAR10:
     self.vanilla_model = model_vanilla
     self.median_model = model2
 
-
+    self.LAMBDA = 0.1
     self.k = k
     self.a = a
     self.Y = np.argmax(Y, axis=1)  # Target Labels
@@ -578,16 +578,23 @@ class CombinedLinfPGDAttackCIFAR10:
     self.sq_bit = sq1
     self.sq_local = sq3
 
+    self.cur_x = tf.placeholder(tf.float32, shape=(None, 32, 32, 3))
+
     self.rc_bit  = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=bit_depth_5")
     self.rc_median = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=median_filter_2_2")
     self.rc_local = FeatureSqueezingRC(self.vanilla_model.keras_model,
                                   "FeatureSqueezing?squeezer=non_local_means_color_13_3_2")
 
+    self.x_diff_vanilla = self.cur_x - self.vanilla_model.x_input
+    self.x_reg_loss_vanilla = self.LAMBDA * tf.reduce_sum(tf.multiply(self.x_diff_vanilla, self.x_diff_vanilla))
+
+    self.x_diff_median = self.cur_x - self.median_model.x_input
+    self.x_reg_loss_median = self.LAMBDA * tf.reduce_sum(tf.multiply(self.x_diff_median, self.x_diff_median))
 
     if loss_func != 'xent':
       print('Unknown loss function. Defaulting to cross-entropy')
-    self.loss_vanilla = self.vanilla_model.xent
-    self.loss_median = self.median_model.xent
+    self.loss_vanilla = self.vanilla_model.xent + self.x_reg_loss_vanilla
+    self.loss_median = self.median_model.xent + self.x_reg_loss_median
 
     self.grad_vanilla = tf.gradients(self.loss_vanilla, self.vanilla_model.x_input)[0]
     self.grad_median = tf.gradients(self.loss_median, self.median_model.x_input)[0]
@@ -610,27 +617,28 @@ class CombinedLinfPGDAttackCIFAR10:
 
     for i in range(self.k):
       x_van = reduce_precision_py(x, 256)
-      x_bit = bit_depth_sq(x_van)
-      x_local = non_local_sq(x_van)
+      x_bit = self.sq_bit(x_van)
+      x_local = self.sq_local(x_van)
 
       vanilla_grad, vanilla_loss, y_vanilla = sess.run([self.grad_vanilla, self.loss_vanilla,
                                                         self.vanilla_model.y_pred],
                                                         feed_dict={self.vanilla_model.x_input: x_van,
-                                                                  self.vanilla_model.y_input: y})
+                                                                  self.vanilla_model.y_input: y,
+                                                                   self.cur_x : x_nat})
 
       median_grad, median_loss, y_median = sess.run([self.grad_median, self.loss_median,
                                                      self.median_model.y_pred],
                                                     feed_dict={self.median_model.x_input: x_van,
-                                                               self.median_model.y_input: y})
+                                                               self.median_model.y_input: y, self.cur_x : x_nat})
       bit_grad, bit_loss, y_bit = sess.run([self.grad_vanilla, self.loss_vanilla,
                                             self.vanilla_model.y_pred],
                                            feed_dict={self.vanilla_model.x_input: x_bit,
-                                                      self.vanilla_model.y_input: y})
+                                                      self.vanilla_model.y_input: y, self.cur_x : x_nat})
 
       local_grad, local_loss, y_local = sess.run([self.grad_vanilla, self.loss_vanilla,
                                                   self.vanilla_model.y_pred],
                                                  feed_dict={self.vanilla_model.x_input: x_local,
-                                                            self.vanilla_model.y_input: y})
+                                                            self.vanilla_model.y_input: y, self.cur_x : x_nat})
 
       y_robust_median = np.argmax(self.rc_median.predict(x_van), axis=1)
       y_robust_bit = np.argmax(self.rc_bit.predict(x_van), axis=1)
@@ -644,7 +652,7 @@ class CombinedLinfPGDAttackCIFAR10:
       local_acc = 1.0 - np.sum(y_local == self.Y) / (float(len(self.Y)))
 
       min_acc = min(vanilla_acc, median_acc, bit_acc, local_acc)
-      if (min_acc >= max_acc):
+      if (min_acc > max_acc):
         max_acc = min_acc
         x_max = np.copy(x)
         sel = i
@@ -659,9 +667,9 @@ class CombinedLinfPGDAttackCIFAR10:
       if not np.array_equal(y_robust_median, y_median):
           print("Medians Disagree")
       if not np.array_equal(y_robust_bit, y_bit):
-          print("Medians Disagree")
+          print("Bit Depth Disagree")
       if not np.array_equal(y_robust_local, y_local):
-          print("Medians Disagree")
+          print("Local Disagree")
 
       grad = vanilla_grad + median_grad + bit_grad + local_grad
       x += self.a * np.sign(grad)

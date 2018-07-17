@@ -90,7 +90,7 @@ def main(argv=None):
     if FLAGS.dataset_name != "ImageNet":
         all_idx = np.arange(10000)
         np.random.shuffle(all_idx)
-        selected_idx = all_idx[:FLAGS.nb_examples]
+        selected_idx = all_idx[:(FLAGS.nb_examples * 2)]
         X_test_all, Y_test_all = X_test_all[selected_idx], Y_test_all[selected_idx]
 
     # 2. Load a trained model.
