@@ -7,6 +7,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from tensorflow.python.platform import flags
+FLAGS = flags.FLAGS
+
 import tensorflow as tf
 import numpy as np
 
@@ -568,7 +571,8 @@ class CombinedLinfPGDAttackCIFAR10:
     self.vanilla_model = model_vanilla
     self.median_model = model2
 
-    self.LAMBDA = 0.1
+    self.LAMBDA = FLAGS.reg_lambda_x
+    print(" ----------- ^^^^^^^^^ ^_^ ^^^^^^^^ ------------- REG LAMBDA X:  ", self.LAMBDA)
     self.k = k
     self.a = a
     self.Y = np.argmax(Y, axis=1)  # Target Labels

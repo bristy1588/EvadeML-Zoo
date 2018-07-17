@@ -47,6 +47,7 @@ flags.DEFINE_boolean('verbose', False, 'Stdout level. The hidden content will be
 flags.DEFINE_string('detection', '', 'Supported: feature_squeezing.')
 flags.DEFINE_boolean('detection_train_test_mode', True, 'Split into train/test datasets.')
 flags.DEFINE_boolean('visualize', True, 'Output the image examples for each attack, enabled by default.')
+flags.DEFINE_float('reg_lambda_x', 0.1, "Regularizer for x")
 
 
 FLAGS.model_name = FLAGS.model_name.lower()
