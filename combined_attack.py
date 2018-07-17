@@ -86,6 +86,13 @@ def main(argv=None):
     else:
         X_test_all, Y_test_all = dataset.get_test_dataset()
 
+    # Randomized optimizations
+    if FLAGS.dataset_name != "ImageNet":
+        all_idx = np.arange(10000)
+        np.random.shuffle(all_idx)
+        selected_idx = all_idx[:FLAGS.nb_examples]
+        X_test_all, Y_test_all = X_test_all[selected_idx], Y_test_all[selected_idx]
+
     # 2. Load a trained model.
     sess = load_tf_session()
     keras.backend.set_learning_phase(0)
@@ -139,9 +146,7 @@ def main(argv=None):
         print (" Bristy !! The two models are referencing the same thing :(")
 
     # Small Optimization for faster testing
-    if FLAGS.dataset_name != "ImageNet":
-        prelim_ids =  np.array(range(FLAGS.nb_examples))
-        X_test_all, Y_test_all = X_test_all[prelim_ids], Y_test_all[prelim_ids]
+
 
     # 3. Evaluate the trained model.
     # TODO: add top-5 accuracy for ImageNet.

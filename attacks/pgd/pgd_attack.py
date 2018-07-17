@@ -365,7 +365,7 @@ class CombinedLinfPGDAttackCIFAR10OLD:
     return x_max
 
 
-class CombinedLinfPGDAttackCIFAR10:
+class CombinedLinfPGDAttackCIFAR10TWO:
   def __init__(self, model_vanilla, model1, model2, model3, epsilon, k, a, random_start, loss_func, Y,
                sq1, sq2, sq3):
     """Attack parameter initialization. The attack performs k steps of
@@ -406,7 +406,7 @@ class CombinedLinfPGDAttackCIFAR10:
     self.loss = self.vanilla_model.xent + self.median_model.xent + self.reg_loss
 
     self.grad = tf.gradients(self.loss, self.median_model.x_input)[0] + \
-                tf.gradients(self.loss, self.vanilla_model.x_input)[0]
+                2 * tf.gradients(self.loss, self.vanilla_model.x_input)[0]
 
   def perturb(self, x_nat, y, sess):
     """Given a set of examples (x_nat, y), returns a set of adversarial
@@ -454,7 +454,14 @@ class CombinedLinfPGDAttackCIFAR10:
       if np.array_equal(y_robust_median, y_median) == False:
         print(" [ERROR] Median Model predictions differ from Robust Classifier Median")
 
-      if median_accuracy >= 0.90 and r_loss < r_min:
+      min_acc = min(median_accuracy ,vanilla_accuracy)
+      if min_acc > max_acc:
+        max_acc = min_acc
+        sel = i
+        x_max = np.copy(x)
+        r_min = r_loss
+
+      if min_acc >= max_acc and r_loss < r_min:
         self.a = 0.001
         r_min = r_loss
         x_max = np.copy(x)
@@ -550,8 +557,120 @@ class LinfPGDAttack:
 
     return x_max
 
+class CombinedLinfPGDAttackCIFAR10:
+  def __init__(self, model_vanilla, model1, model2, model3, epsilon, k, a, random_start, loss_func, Y,
+               sq1, sq2, sq3):
+    """Attack parameter initialization. The attack performs k steps of
+       size a, while always staying within epsilon from the initial
+       point.
+       This simulatenously runs the Combined Linf attack for 4 models
+       """
+    self.vanilla_model = model_vanilla
+    self.median_model = model2
 
 
+    self.k = k
+    self.a = a
+    self.Y = np.argmax(Y, axis=1)  # Target Labels
+    self.rand = random_start
+    self.epsilon = epsilon
+
+    self.sq_bit = sq1
+    self.sq_local = sq3
+
+    self.rc_bit  = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=bit_depth_5")
+    self.rc_median = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=median_filter_2_2")
+    self.rc_local = FeatureSqueezingRC(self.vanilla_model.keras_model,
+                                  "FeatureSqueezing?squeezer=non_local_means_color_13_3_2")
+
+
+    if loss_func != 'xent':
+      print('Unknown loss function. Defaulting to cross-entropy')
+    self.loss_vanilla = self.vanilla_model.xent
+    self.loss_median = self.median_model.xent
+
+    self.grad_vanilla = tf.gradients(self.loss_vanilla, self.vanilla_model.x_input)[0]
+    self.grad_median = tf.gradients(self.loss_median, self.median_model.x_input)[0]
+
+  def perturb(self, x_nat, y, sess):
+    """Given a set of examples (x_nat, y), returns a set of adversarial
+       examples within epsilon of x_nat in l_infinity norm."""
+    if self.rand:
+      x = x_nat + np.random.uniform(-self.epsilon, self.epsilon, x_nat.shape)
+    else:
+      x = np.copy(x_nat)
+
+    r_min = 100000.00
+    max_acc = 0
+    x_max = x
+    sel = 0
+
+    bit_depth_sq = get_squeezer_by_name("bit_depth_5", "python")
+    non_local_sq = get_squeezer_by_name("non_local_means_color_13_3_2", "python")
+
+    for i in range(self.k):
+      x_van = reduce_precision_py(x, 256)
+      x_bit = bit_depth_sq(x_van)
+      x_local = non_local_sq(x_van)
+
+      vanilla_grad, vanilla_loss, y_vanilla = sess.run([self.grad_vanilla, self.loss_vanilla,
+                                                        self.vanilla_model.y_pred],
+                                                        feed_dict={self.vanilla_model.x_input: x_van,
+                                                                  self.vanilla_model.y_input: y})
+
+      median_grad, median_loss, y_median = sess.run([self.grad_median, self.loss_median,
+                                                     self.median_model.y_pred],
+                                                    feed_dict={self.median_model.x_input: x_van,
+                                                               self.median_model.y_input: y})
+      bit_grad, bit_loss, y_bit = sess.run([self.grad_vanilla, self.loss_vanilla,
+                                            self.vanilla_model.y_pred],
+                                           feed_dict={self.vanilla_model.x_input: x_bit,
+                                                      self.vanilla_model.y_input: y})
+
+      local_grad, local_loss, y_local = sess.run([self.grad_vanilla, self.loss_vanilla,
+                                                  self.vanilla_model.y_pred],
+                                                 feed_dict={self.vanilla_model.x_input: x_local,
+                                                            self.vanilla_model.y_input: y})
+
+      y_robust_median = np.argmax(self.rc_median.predict(x_van), axis=1)
+      y_robust_bit = np.argmax(self.rc_bit.predict(x_van), axis=1)
+      y_robust_local = np.argmax(self.rc_local.predict(x_van), axis = 1)
+
+
+
+      vanilla_acc = 1.0 - np.sum(y_vanilla == self.Y) / (float(len(self.Y)))
+      median_acc = 1.0 - np.sum(y_median == self.Y) / (float(len(self.Y)))
+      bit_acc = 1.0 - np.sum(y_bit == self.Y) / (float(len(self.Y)))
+      local_acc = 1.0 - np.sum(y_local == self.Y) / (float(len(self.Y)))
+
+      min_acc = min(vanilla_acc, median_acc, bit_acc, local_acc)
+      if (min_acc >= max_acc):
+        max_acc = min_acc
+        x_max = np.copy(x)
+        sel = i
+
+      if (i > 20):
+          self.a = 0.01
+
+      print(" Iteration : ", i)
+      tempilate = ('Vanilla: ({:.3f}%)   Median: ({:.3f}%)  Bit: ({:.3f}%) Non-local: ({:.3f}%)')
+      print(tempilate.format(vanilla_acc, median_acc, bit_acc, local_acc))
+
+      if not np.array_equal(y_robust_median, y_median):
+          print("Medians Disagree")
+      if not np.array_equal(y_robust_bit, y_bit):
+          print("Medians Disagree")
+      if not np.array_equal(y_robust_local, y_local):
+          print("Medians Disagree")
+
+      grad = vanilla_grad + median_grad + bit_grad + local_grad
+      x += self.a * np.sign(grad)
+      x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
+      x = np.clip(x, 0, 1)
+
+    print("Selected Iteration:", sel)
+
+    return x_max
 
 if __name__ == '__main__':
   import json
