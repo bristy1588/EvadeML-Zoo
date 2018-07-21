@@ -582,7 +582,7 @@ class CombinedLinfPGDAttackCIFAR10:
     self.sq_bit = sq1
     self.sq_local = sq3
 
-    self.cur_x = tf.placeholder(tf.float32, shape=(None, 32, 32, 3))
+    self.cur_x = tf.placeholder(tf.float32, shape=(None, FLAGS.image_size, FLAGS.image_size, 3))
 
     self.rc_bit  = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=bit_depth_5")
     self.rc_median = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=median_filter_2_2")
@@ -661,7 +661,7 @@ class CombinedLinfPGDAttackCIFAR10:
         x_max = np.copy(x)
         sel = i
 
-      if (i > 20):
+      if (i > 15):
           self.a = 0.01
 
       print(" Iteration : ", i)

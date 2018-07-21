@@ -49,6 +49,7 @@ flags.DEFINE_boolean('detection_train_test_mode', True, 'Split into train/test d
 flags.DEFINE_boolean('visualize', True, 'Output the image examples for each attack, enabled by default.')
 flags.DEFINE_float('reg_lambda_x', 0.1, "Regularizer for x")
 
+flags.DEFINE_integar('image_size', 32, ' Image size. CIFAR Image Size by Default')
 
 FLAGS.model_name = FLAGS.model_name.lower()
 
@@ -73,8 +74,10 @@ def main(argv=None):
         dataset = MNISTDataset()
     elif FLAGS.dataset_name == "CIFAR-10":
         dataset = CIFAR10Dataset()
+        FLAGS.image_size = 32
     elif FLAGS.dataset_name == "ImageNet":
         dataset = ImageNetDataset()
+        FLAGS.image_size = 224
 
     # 1. Load a dataset.
     print("\n===Loading %s data..." % FLAGS.dataset_name)
@@ -110,7 +113,7 @@ def main(argv=None):
         The scaling argument, 'input_range_type': {1: [0,1], 2:[-0.5, 0.5], 3:[-1, 1]...}
         """
         # Model considering Adaptive Attacks
-        model_vanilla = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1, m_name="vanilla")
+        model_vanilla = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1)
         model_vanilla.compile(loss='categorical_crossentropy', optimizer='sgd', metrics=['acc'])
 
     with tf.variable_scope(FLAGS.model_name + "bitdepth"):
@@ -119,7 +122,7 @@ def main(argv=None):
         The scaling argument, 'input_range_type': {1: [0,1], 2:[-0.5, 0.5], 3:[-1, 1]...}
         """
         # Model considering Adaptive Attacks
-        model_bit_depth = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1, m_name="bit_depth")
+        model_bit_depth = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1)
         model_bit_depth.compile(loss='categorical_crossentropy',optimizer='sgd', metrics=['acc'])
 
     with tf.variable_scope(FLAGS.model_name + "median"):
@@ -130,7 +133,7 @@ def main(argv=None):
         # Model considering Adaptive Attacks
 
         model_median = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1,
-                                                  pre_filter=get_squeezer_by_name(FLAGS.median_filter, 'tensorflow'), m_name= "median")
+                                                  pre_filter=get_squeezer_by_name(FLAGS.median_filter, 'tensorflow'))
         model_median.compile(loss='categorical_crossentropy', optimizer='sgd', metrics=['acc'])
 
     with tf.variable_scope(FLAGS.model_name + "nonlocal"):
@@ -139,7 +142,7 @@ def main(argv=None):
         The scaling argument, 'input_range_type': {1: [0,1], 2:[-0.5, 0.5], 3:[-1, 1]...}
         """
         # Model considering Adaptive Attacks
-        model_non_local = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1, m_name="nonlocal")
+        model_non_local = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1)
         model_non_local.compile(loss='categorical_crossentropy', optimizer='sgd', metrics=['acc'])
 
 

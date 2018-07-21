@@ -40,7 +40,7 @@ class CIFAR10Dataset:
         return X_val, Y_val
 
 
-    def load_model_by_name(self, model_name, logits=False, input_range_type=1, pre_filter=lambda x:x, m_name=None):
+    def load_model_by_name(self, model_name, logits=False, input_range_type=1, pre_filter=lambda x:x):
         """
         :params logits: return logits(input of softmax layer) if True; return softmax output otherwise.
         :params input_range_type: {1: [0,1], 2:[-0.5, 0.5], 3:[-1, 1]...}
@@ -57,7 +57,7 @@ class CIFAR10Dataset:
         elif model_name == "carlini":
             model = carlini_cifar10_model(logits=logits, input_range_type=input_range_type, pre_filter=pre_filter)
         elif model_name == "densenet":
-            model = densenet_cifar10_model(logits=logits, input_range_type=input_range_type, pre_filter=pre_filter, m_name=m_name)
+            model = densenet_cifar10_model(logits=logits, input_range_type=input_range_type, pre_filter=pre_filter)
             model_weights_fpath = get_densenet_weights_path(self.dataset_name)
         print("\n===Defined TensorFlow model graph.")
         model.load_weights(model_weights_fpath)
