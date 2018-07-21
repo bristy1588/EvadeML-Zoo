@@ -49,7 +49,7 @@ flags.DEFINE_boolean('detection_train_test_mode', True, 'Split into train/test d
 flags.DEFINE_boolean('visualize', True, 'Output the image examples for each attack, enabled by default.')
 flags.DEFINE_float('reg_lambda_x', 0.1, "Regularizer for x")
 
-flags.DEFINE_integar('image_size', 32, ' Image size. CIFAR Image Size by Default')
+flags.DEFINE_integer('image_size', 32, ' Image size. CIFAR Image Size by Default')
 
 FLAGS.model_name = FLAGS.model_name.lower()
 

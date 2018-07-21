@@ -584,10 +584,10 @@ class CombinedLinfPGDAttackCIFAR10:
 
     self.cur_x = tf.placeholder(tf.float32, shape=(None, FLAGS.image_size, FLAGS.image_size, 3))
 
-    self.rc_bit  = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=bit_depth_5")
-    self.rc_median = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=median_filter_2_2")
+    self.rc_bit  = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=" + FLAGS.bit_depth_filter)
+    self.rc_median = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer="+ FLAGS.median_filter)
     self.rc_local = FeatureSqueezingRC(self.vanilla_model.keras_model,
-                                  "FeatureSqueezing?squeezer=non_local_means_color_13_3_2")
+                                  "FeatureSqueezing?squeezer="+ FLAGS.non_local_filter)
 
     self.x_diff_vanilla = self.cur_x - self.vanilla_model.x_input
     self.x_reg_loss_vanilla = self.LAMBDA * tf.reduce_sum(tf.multiply(self.x_diff_vanilla, self.x_diff_vanilla))
@@ -616,8 +616,8 @@ class CombinedLinfPGDAttackCIFAR10:
     x_max = x
     sel = 0
 
-    bit_depth_sq = get_squeezer_by_name("bit_depth_5", "python")
-    non_local_sq = get_squeezer_by_name("non_local_means_color_13_3_2", "python")
+    bit_depth_sq = get_squeezer_by_name(FLAGS.bit_depth_filter, "python")
+    non_local_sq = get_squeezer_by_name(FLAGS.non_local_filter, "python")
 
     for i in range(self.k):
       x_van = reduce_precision_py(x, 256)
