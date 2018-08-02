@@ -18,48 +18,55 @@ from robustness.feature_squeezing import FeatureSqueezingRC
 
 l2_dist = lambda x1,x2: np.sum((x1-x2)**2, axis=tuple(range(len(x1.shape))[1:]))
 
-# Optimizes for 3 models for now, could be extended into more.
+# Debugged Implementations (hopefully)
 class CombinedLinfPGDAttack:
-  def __init__(self, model1, model2, model3, epsilon, k, a, random_start, loss_func, Y=None,
-               sq1 = lambda x:x, sq2 = lambda x:x, sq3 = lambda x:x):
-    """Attack parameter initialization. The attack performs k steps of
-       size a, while always staying within epsilon from the initial
-       point.
-       This simulatenously runs the Combined Linf attack for 4 models
-       """
-    self.model1 = model1
-    self.model2 = model2
-    self.model3 = model3
+  def __init__(self, model_vanilla, model_bit, model_median, model_local, epsilon, k, a, random_start, loss_func, Y,
+                sq_bit, sq_median, sq_local):
+
+    self.model_vanilla = model_vanilla
+    self.model_bit = model_bit
+    self.model_median = model_median
+    self.model_local = model_local
+
+    # (TODO) : Substitute these with Flags
+    # (TODO) : Add a regularizer
+    THRESHOLD = FLAGS.threshold
+    REG_LAMBDA = FLAGS.reg_lambda
+
+    print("Threshold: %.3f  Regularization: %.3f" % (THRESHOLD, REG_LAMBDA))
+
     self.epsilon = epsilon
-    self.vanilla_model = model1   # Models 1,2 are bit-depth models 
-	
     self.k = k
     self.a = a
     self.Y = np.argmax(Y, axis = 1) # Target Labels
     self.rand = random_start
 
-    self.sq1 = sq1
-    self.sq2 = sq2
-    self.sq3 = sq3 
+    self.sq_bit = sq_bit
+    self.sq_median = sq_median
+    self.sq_local = sq_local
  
-    vanilla_y_softmax = tf.nn.softmax(self.vanilla_model.pre_softmax)
-    y1_softmax        = tf.nn.softmax(self.model1.pre_softmax)
-    y2_softmax        = tf.nn.softmax(self.model2.pre_softmax)
-    y3_softmax        = tf.nn.softmax(self.model3.pre_softmax) 
-    t1 = y1_softmax - vanilla_y_softmax
-    t2 = y2_softmax - vanilla_y_softmax
-    t3 = y3_softmax - vanilla_y_softmax
-    diff_softmax_1 = tf.nn.relu(tf.reduce_sum(tf.multiply(t1, t1), axis=1) - 0.8)
-    diff_softmax_2 = tf.nn.relu(tf.reduce_sum(tf.multiply(t2, t2), axis=1) - 0.8)
-    diff_softmax_3 = tf.nn.relu(tf.reduce_sum(tf.multiply(t3, t3), axis=1) - 0.8)
-    self.reg_loss = 1000 * (tf.reduce_sum(diff_softmax_1) + tf.reduce_sum(diff_softmax_2) + tf.reduce_sum(diff_softmax_3)) 
-    self.loss = model1.xent + model2.xent + model3.xent - self.reg_loss
-    # (TODO) Need to add an regularizaton of some sort.
+    vanilla_softmax = tf.nn.softmax(self.model_vanilla.pre_softmax)
+    bit_softmax     = tf.nn.softmax(self.model_bit.pre_softmax)
+    median_softmax  = tf.nn.softmax(self.model_median.pre_softmax)
+    local_softmax   = tf.nn.softmax(self.model_local.pre_softmax)
+
+    bit_t    = bit_softmax - vanilla_softmax
+    median_t = median_softmax - vanilla_softmax
+    local_t  = local_softmax - vanilla_softmax
+
+    diff_bit = tf.nn.relu(tf.reduce_sum(tf.multiply(bit_t, bit_t), axis=1) - THRESHOLD)
+    diff_median = tf.nn.relu(tf.reduce_sum(tf.multiply(median_t, median_t), axis=1) -  THRESHOLD)
+    diff_local = tf.nn.relu(tf.reduce_sum(tf.multiply(local_t, local_t), axis=1) - THRESHOLD)
+
+    self.reg_loss = REG_LAMBDA * (tf.reduce_sum(diff_bit) + tf.reduce_sum(diff_median) + tf.reduce_sum(diff_local))
+    self.loss = self.model_bit.xent + self.model_median.xent + self.model_local.xent - self.reg_loss
+
     if loss_func != 'xent':
       print('Unknown loss function. Defaulting to cross-entropy')
 
-    self.grad = (tf.gradients(self.loss, model1.x_input)[0] + tf.gradients(self.loss, model2.x_input)[0] \
-                 + tf.gradients(self.loss, model3.x_input)[0])
+    self.grad = (tf.gradients(self.loss, self.model_bit.x_input)[0]  \
+                 + tf.gradients(self.loss, self.model_median.x_input)[0] \
+                 + tf.gradients(self.loss, self.model_local.x_input)[0])
 
   def perturb(self, x_nat, y, sess):
     """Given a set of examples (x_nat, y), returns a set of adversarial
@@ -75,34 +82,43 @@ class CombinedLinfPGDAttack:
     sel = 0
     for i in range(self.k):
       # Performing BPDA and EOT here
-      x1 = self.sq1(reduce_precision_py(x, 256))
-      x2 = self.sq2(reduce_precision_py(x, 256))
-      x3 = self.sq3(reduce_precision_py(x, 256))
-      x_van = reduce_precision_py(x, 256)
-      grad, l, y_cur1, y_cur2, y_cur3, y_van, r_loss = sess.run([self.grad, self.loss, self.model1.y_pred,
-                              self.model2.y_pred,self.model3.y_pred,self.vanilla_model.y_pred, self.reg_loss],
-                              feed_dict={ self.model1.x_input: x1, self.model2.x_input: x2, self.model3.x_input: x3,
-                              self.vanilla_model.x_input: x_van, self.model1.y_input: y, self.model2.y_input:
-                              y, self.model3.y_input: y,  self.vanilla_model.y_input: y })
+      x_van     = reduce_precision_py(x, 256)
+      x_bit     = self.sq_bit(x_van)
+      x_median  = self.sq_median(x_van)
+      x_local   = self.sq_local(x_van)
 
-      sq1_acc = 1 - np.sum(y_cur1 == self.Y)/(float(len(self.Y)))
-      sq2_acc = 1 - np.sum(y_cur2 == self.Y)/(float(len(self.Y)))
-      sq3_acc = 1 - np.sum(y_cur3 == self.Y)/(float(len(self.Y)))
-      van_acc = 1 - np.sum(y_van  == self.Y)/(float(len(self.Y)))
-      min_acc = min(sq1_acc, sq2_acc, sq3_acc)
-      print("Itr: ", i, " Loss: ", l, " Reg Loss: ", r_loss, "----")
-      print("  Bit Depth: ", sq1_acc, " Median Depth: ", sq2_acc, " Non local means:", sq3_acc, " Vanilla :", van_acc)
-      if min_acc > 0.88 and r_loss < r_min:
-        r_min = r_loss
+
+      grad, loss, y_vanilla, y_bit, y_median, y_local, reg_loss = sess.run([ self.grad, self.loss,
+                  self.model_vanilla.y_pred, self.model_bit.y_pred, self.model_median.y_pred, self.model_local.y_pred,
+                  self.reg_loss], feed_dict = { self.model_vanilla.x_input : x_van, self.model_vanilla.y_input : y,
+                                                self.model_bit.x_input : x_bit, self.model_bit.y_input : y,
+                                                self.model_median.x_input: x_median, self.model_median.y_input:y,
+                                                self.model_local.x_input: x_local, self.model_local.y_input:y })
+
+
+      vanilla_accuracy = 1 - np.sum(y_vanilla == self.Y)/(float(len(self.Y)))
+      bit_accuracy     = 1 - np.sum(y_bit == self.Y)/(float(len(self.Y)))
+      median_accuracy  = 1 - np.sum(y_median == self.Y)/(float(len(self.Y)))
+      local_accuracy   = 1 - np.sum(y_local  == self.Y)/(float(len(self.Y)))
+      min_accuracy = min(bit_accuracy, median_accuracy, local_accuracy)
+
+      print("======  Itr: ", i, " Loss: ", loss, " Reg Loss: ", reg_loss)
+      output_template = ('Vanilla : ({:.3f}%)   Median: ({:.3f}%)  Bit:({:.3f}%)   Non Local:({:.3f}%)')
+      print(output_template.format(vanilla_accuracy, median_accuracy, bit_accuracy, local_accuracy))
+
+      if min_accuracy > max_acc or (min_accuracy >= max_acc and reg_loss < r_min):
+        max_acc = min_accuracy
         x_max = np.copy(x)
-        sel = i 
+        sel = i
+        r_min = reg_loss
+
 
       x += self.a * np.sign(grad)
       x = np.clip(x, 0, 1)  # ensure valid pixel range
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
-   
-    print(" Selected i:", sel, " Reg Loss:", r_min)
-    #x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
+
+    x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
+
     return x_max
 
 
@@ -203,8 +219,6 @@ class CombinedLinfPGDAttackImageNet:
     print(" Selected i:", sel, " Reg Loss:", r_min)
     # x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
     return x_max
-
-
 
 # Optimizes for 3 models for now, could be extended into more.
 class CombinedLinfPGDAttackCIFAR10OLD:
@@ -367,7 +381,6 @@ class CombinedLinfPGDAttackCIFAR10OLD:
     # x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
     return x_max
 
-
 class CombinedLinfPGDAttackCIFAR10TWO:
   def __init__(self, model_vanilla, model1, model2, model3, epsilon, k, a, random_start, loss_func, Y,
                sq1, sq2, sq3):
@@ -477,7 +490,6 @@ class CombinedLinfPGDAttackCIFAR10TWO:
     print(" Selected i:", sel, " Reg Loss:", r_min)
     # x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
     return x_max
-
 
 class LinfPGDAttack:
   def __init__(self, model, epsilon, k, a, random_start, loss_func, squeezer=lambda x:x, Y=None, vanilla_model = None):
@@ -684,7 +696,6 @@ class CombinedLinfPGDAttackCIFAR10:
 
     return x_max
 
-
 class CombinedLinfPGDAttackDEBUG:
   def __init__(self, model_vanilla, model1, model2, model3, epsilon, k, a, random_start, loss_func, Y,
                sq1, sq2, sq3):
@@ -711,7 +722,6 @@ class CombinedLinfPGDAttackDEBUG:
 
 
     self.cur_x = tf.placeholder(tf.float32, shape=(None, FLAGS.image_size, FLAGS.image_size, 3))
-    self.p_op = tf.Print(self.cur_x, [self.cur_x], " Current Tensor Value:: ")
     self.rc_bit  = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=" + FLAGS.bit_depth_filter)
     self.rc_median = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer="+ FLAGS.median_filter)
     self.rc_local = FeatureSqueezingRC(self.vanilla_model.keras_model,
@@ -850,8 +860,6 @@ class CombinedLinfPGDAttackDEBUG:
     print("Selected Iteration:", sel)
 
     return x_max
-
-
 
 if __name__ == '__main__':
   import json

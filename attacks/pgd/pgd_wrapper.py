@@ -65,37 +65,6 @@ def bpda_generate_pgdli_examples(sess, model, x, y, X, Y, attack_params, verbose
     X_adv = attack.perturb(X, Y_class, sess)
     return X_adv
 
-"""
-class CombinedPGDModelWrapper:
-    def __init__(self, model_bit_depth, model_median, model_non_local, sq_bit_depth, 
-                 sq_median, sq_non_local, x, y):
-       
-        model_logits_bit_depth = Model(inputs=model_bit_depth.layers[0].input, outputs=model_bit_depth.layers[-2].output)
-        model_logits_median = Model(inputs=model_median.layers[0].input,outputs=model_median.layers[-2].output)
-        model_logits_non_local = Model(inputs=model_non_local.layers[0].input, outputs=model_non_local.layers[-2].output)
-        
-        self.x_input_bit_depth = sq_bit_depth(x)
-        self.x_input_median = sq_median(x)
-        self.x_input_non_local = sq_non_local(x)
-        
-        
-        self.y_input_bit_depth = tf.argmax(y, 1)
-        self.y_input_median = tf.argmax(y, 1)
-        self.y_input_non_local = tf.argmax(y, 1)
-        
-        self.pre_softmax = model_logits(x)
-        self.keras_model = keras_model
-        #self.x_nat = tf.placeholder(tf.float32, shape=(None, 32, 32, 3))
-        
-        y_xent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            labels=self.y_input, logits=self.pre_softmax)
-        self.xent = tf.reduce_sum(y_xent)
-
-        self.y_pred = tf.argmax(self.pre_softmax, 1)
-        
-        self.
-"""
-
 
 def combined_generate_pgdli_examples(sess, model_vanilla,  model1, model2, model3,  x, y, x_bit, x_local, x_median, X, Y, attack_params, sq1,sq2,sq3):
     model_1_for_pgd = PGDModelWrapper(model1, x_bit, y)
@@ -109,6 +78,26 @@ def combined_generate_pgdli_examples(sess, model_vanilla,  model1, model2, model
 
     params = override_params(params, attack_params)
     attack = CombinedLinfPGDAttackDEBUG(**params)
+    Y_class = np.argmax(Y, 1)
+    X_adv = attack.perturb(X, Y_class, sess)
+    return X_adv
+
+def combined_adversarial_attack(sess, model_vanilla, model_bit, model_median, model_local, x, y, x_bit,
+                                x_local, x_median, X, Y, attack_params, sq_bit, sq_median,
+                                sq_local ):
+    print(" Entering Adversarial Attack ")
+    model_vanilla_pgd = PGDModelWrapper(model_vanilla, x, y)
+    model_bit_pgd = PGDModelWrapper(model_bit, x_bit, y)
+    model_median_pgd = PGDModelWrapper(model_median, x_median, y)
+    model_local_pgd = PGDModelWrapper(model_local, x_local, y)
+
+
+    params = {'model_vanilla': model_vanilla_pgd,  'model_bit': model_bit_pgd, 'model_median': model_median_pgd,
+              'model_local': model_local_pgd,  'epsilon': 0.3,'k': 20, 'a': 0.01, 'random_start': True,
+              'loss_func': 'xent', 'sq_bit': sq_bit, 'sq_median': sq_median, 'sq_local': sq_local, 'Y': Y}
+
+    params = override_params(params, attack_params)
+    attack = CombinedLinfPGDAttack(**params)
     Y_class = np.argmax(Y, 1)
     X_adv = attack.perturb(X, Y_class, sess)
     return X_adv
