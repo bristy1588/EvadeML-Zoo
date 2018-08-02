@@ -51,8 +51,6 @@ def load_tf_session():
 
 
 def main(argv=None):
-
-
     # 0. Select a dataset.
     from datasets import MNISTDataset, CIFAR10Dataset, ImageNetDataset
     from datasets import get_correct_prediction_idx, evaluate_adversarial_examples, calculate_mean_confidence, calculate_accuracy
@@ -84,7 +82,7 @@ def main(argv=None):
     x = tf.placeholder(tf.float32, shape=(None, dataset.image_size, dataset.image_size, dataset.num_channels))
     y = tf.placeholder(tf.float32, shape=(None, dataset.num_classes))
 
-    with tf.variable_scope(FLAGS.model_name ):
+    with tf.variable_scope(FLAGS.model_name):
         """
         Create a model instance for prediction.
         The scaling argument, 'input_range_type': {1: [0,1], 2:[-0.5, 0.5], 3:[-1, 1]...}
@@ -92,11 +90,6 @@ def main(argv=None):
         model = dataset.load_model_by_name(FLAGS.model_name, logits=False, input_range_type=1)
         model.compile(loss='categorical_crossentropy',optimizer='sgd', metrics=['acc'])
 
-
-        # Small Optimization for faster testing
-    if FLAGS.dataset_name != "ImageNet":
-        prelim_ids = np.array(range(FLAGS.nb_examples * 4))
-        X_test_all, Y_test_all = X_test_all[prelim_ids], Y_test_all[prelim_ids]
 
     # 3. Evaluate the trained model.
     # TODO: add top-5 accuracy for ImageNet.
@@ -250,7 +243,6 @@ def main(argv=None):
         Y_test_adv_discret_pred = model.predict(X_test_adv_discret)
         Y_test_adv_discretized_pred_list.append(Y_test_adv_discret_pred)
 
-        # Y_test_adv_discret_pred is for the vanilla model
         rec = evaluate_adversarial_examples(X_test, Y_test, X_test_adv_discret, Y_test_target.copy(), targeted, Y_test_adv_discret_pred)
         rec['dataset_name'] = FLAGS.dataset_name
         rec['model_name'] = FLAGS.model_name
@@ -261,7 +253,7 @@ def main(argv=None):
 
 
     from utils.output import write_to_csv
-    attacks_evaluation_csv_fpath = os.path.join(FLAGS.result_folder,
+    attacks_evaluation_csv_fpath = os.path.join(FLAGS.result_folder, 
             "%s_attacks_%s_evaluation.csv" % \
             (task_id, attack_string_hash))
     fieldnames = ['dataset_name', 'model_name', 'attack_string', 'duration_per_sample', 'discretization', 'success_rate', 'mean_confidence', 'mean_l2_dist', 'mean_li_dist', 'mean_l0_dist_value', 'mean_l0_dist_pixel']
@@ -299,7 +291,7 @@ def main(argv=None):
         result_folder_robustness = os.path.join(FLAGS.result_folder, "robustness")
         fname_prefix = "%s_%s_robustness" % (task_id, attack_string_hash)
         evaluate_robustness(FLAGS.robustness, model, Y_test_all, X_test_all, Y_test, \
-                attack_string_list, X_test_adv_discretized_list,
+                attack_string_list, X_test_adv_discretized_list, 
                 fname_prefix, selected_idx_vis, result_folder_robustness)
 
 
@@ -312,10 +304,7 @@ def main(argv=None):
         csv_fname = "%s_attacks_%s_detection.csv" % (task_id, attack_string_hash)
         de = DetectionEvaluator(model, result_folder_detection, csv_fname, FLAGS.dataset_name)
         Y_test_all_pred = model.predict(X_test_all)
-        de.build_detection_dataset(X_test_all, Y_test_all, Y_test_all_pred, selected_idx,
-                                   X_test_adv_discretized_list, Y_test_adv_discretized_pred_list,
-                                   attack_string_list, attack_string_hash, FLAGS.clip,
-                                   Y_test_target_next, Y_test_target_ll)
+        de.build_detection_dataset(X_test_all, Y_test_all, Y_test_all_pred, selected_idx, X_test_adv_discretized_list, Y_test_adv_discretized_pred_list, attack_string_list, attack_string_hash, FLAGS.clip, Y_test_target_next, Y_test_target_ll)
         de.evaluate_detections(FLAGS.detection)
 
 

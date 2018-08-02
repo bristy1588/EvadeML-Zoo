@@ -50,7 +50,6 @@ class DetectionEvaluator:
             Detection rate on each attack.
             Detection on SAEs / FAEs.
             ROC-AUC.
-
     A detector should have this simplified interface:
         Y_pred = detector(X)
     """
@@ -101,9 +100,9 @@ class DetectionEvaluator:
         else:
             print ("Preparing the detection dataset...")
 
-        # 1. Split Train and Test 
+        # 1. Split Train and Test
         random.seed(1234)
-        length = len(X_detect)  # X_detect is [LEG, ADV]
+        length = len(X_detect)
         train_ratio = 0.5
         train_idx = random.sample(range(length), int(train_ratio*length))
         train_test_seq = [1 if idx in train_idx else 0 for idx in range(length) ]
@@ -246,7 +245,6 @@ class DetectionEvaluator:
 
         for detector_name in detector_names:
             detector = self.get_detector_by_name(detector_name)
-            print( "Detector Name: ", detector)
             if detector is None:
                 print ("Skipped an unknown detector [%s]" % detector_name.split('?')[0])
                 continue
@@ -311,10 +309,8 @@ class DetectionEvaluator:
                 X_fae, Y_fae = self.get_fae_testing_data()
             else:
                 X_fae, Y_fae = self.get_fae_data()
-            if X_fae is not None:
-                print(" X Fae Shape: ", X_fae.shape)
-                Y_test_pred, Y_test_pred_score = detector.test(X_fae)
-                _, tpr, _, tp, ap = evalulate_detection_test(Y_fae, Y_test_pred)
-                print ("Overall detection rate on FAEs: %.4f \t %3d/%3d" % (tpr, tp, ap))
+            Y_test_pred, Y_test_pred_score = detector.test(X_fae)
+            _, tpr, _, tp, ap = evalulate_detection_test(Y_fae, Y_test_pred)
+            print ("Overall detection rate on FAEs: %.4f \t %3d/%3d" % (tpr, tp, ap))
 
         write_to_csv(to_csv, csv_fpath, fieldnames)

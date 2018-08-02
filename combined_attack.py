@@ -48,6 +48,7 @@ flags.DEFINE_string('detection', '', 'Supported: feature_squeezing.')
 flags.DEFINE_boolean('detection_train_test_mode', True, 'Split into train/test datasets.')
 flags.DEFINE_boolean('visualize', True, 'Output the image examples for each attack, enabled by default.')
 flags.DEFINE_float('reg_lambda_x', 0.1, "Regularizer for x")
+flags.DEFINE_float('tot_reg_loss', 0.1, "Total Regularization Loss")
 
 flags.DEFINE_integer('image_size', 32, ' Image size. CIFAR Image Size by Default')
 
@@ -103,6 +104,9 @@ def main(argv=None):
     # Define input TF placeholder
     x = tf.placeholder(tf.float32, shape=(None, dataset.image_size, dataset.image_size, dataset.num_channels))
     y = tf.placeholder(tf.float32, shape=(None, dataset.num_classes))
+    x_bit = tf.placeholder(tf.float32, shape=(None, dataset.image_size, dataset.image_size, dataset.num_channels))
+    x_local = tf.placeholder(tf.float32, shape=(None, dataset.image_size, dataset.image_size, dataset.num_channels))
+    x_median = tf.placeholder(tf.float32, shape=(None, dataset.image_size, dataset.image_size, dataset.num_channels))
     sq_bit_depth = get_squeezer_by_name(FLAGS.bit_depth_filter, 'python')
     sq_median = lambda x : x     # Because the model compensates for this
     sq_non_local = get_squeezer_by_name(FLAGS.non_local_filter , 'python')
@@ -159,6 +163,7 @@ def main(argv=None):
     # Bit Depth and Non Local are the vanilla models
 
     # We use the Vanilla Model here for Prediction
+    print("  ************************************************* Shape of X_tes_all :", X_test_all.shape)
     Y_pred_all = model_vanilla.predict(X_test_all)
     mean_conf_all = calculate_mean_confidence(Y_pred_all, Y_test_all)
     accuracy_all = calculate_accuracy(Y_pred_all, Y_test_all)
@@ -283,10 +288,10 @@ def main(argv=None):
         # Note that we use the attack model here instead of the vanilla model
         # Note that we pass in the Squeezer function for BPDA
         X_test_adv, aux_info = maybe_combined_generate_pgdli_examples(sess, model_vanilla,
-                                    model_bit_depth, model_median, model_non_local, x, y, X_test,
+                                    model_bit_depth, model_median, model_non_local, x, y, x_bit, x_local, x_median, X_test,
                                     Y_test_target, attack_params, use_cache = x_adv_fpath,
                                     verbose=FLAGS.verbose, attack_log_fpath=attack_log_fpath, sq1 = sq_bit_depth,
-                                    sq2 = sq_median, sq3 = sq_non_local )
+                                    sq2 = sq_median, sq3 = sq_non_local , )
 
         if FLAGS.clip > 0:
             # This is L-inf clipping.

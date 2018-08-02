@@ -1,7 +1,7 @@
 
 import warnings
 from .pgd_attack import CombinedLinfPGDAttackImageNet, CombinedLinfPGDAttackCIFAR10, LinfPGDAttack, CombinedLinfPGDAttack
-
+from .pgd_attack import CombinedLinfPGDAttackDEBUG
 from keras.models import Model
 import tensorflow as tf
 import numpy as np
@@ -97,10 +97,10 @@ class CombinedPGDModelWrapper:
 """
 
 
-def combined_generate_pgdli_examples(sess, model_vanilla,  model1, model2, model3,  x, y, X, Y, attack_params, sq1,sq2,sq3):
-    model_1_for_pgd = PGDModelWrapper(model1, x, y)
-    model_2_for_pgd = PGDModelWrapper(model2, x, y)
-    model_3_for_pgd = PGDModelWrapper(model3, x, y)
+def combined_generate_pgdli_examples(sess, model_vanilla,  model1, model2, model3,  x, y, x_bit, x_local, x_median, X, Y, attack_params, sq1,sq2,sq3):
+    model_1_for_pgd = PGDModelWrapper(model1, x_bit, y)
+    model_2_for_pgd = PGDModelWrapper(model2, x_local, y)
+    model_3_for_pgd = PGDModelWrapper(model3, x_median, y)
     model_vanilla_for_pgd = PGDModelWrapper(model_vanilla, x, y)
 
     params = {'model1': model_1_for_pgd,  'model2': model_2_for_pgd,'model3': model_3_for_pgd, 'epsilon': 0.3,
@@ -108,7 +108,7 @@ def combined_generate_pgdli_examples(sess, model_vanilla,  model1, model2, model
               'model_vanilla': model_vanilla_for_pgd}
 
     params = override_params(params, attack_params)
-    attack = CombinedLinfPGDAttackCIFAR10(**params)
+    attack = CombinedLinfPGDAttackDEBUG(**params)
     Y_class = np.argmax(Y, 1)
     X_adv = attack.perturb(X, Y_class, sess)
     return X_adv

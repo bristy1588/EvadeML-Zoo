@@ -30,7 +30,7 @@ def get_densenet_weights_path(dataset_name="CIFAR-10", include_top=True):
     return weights_path
 
 
-def densenet_cifar10_model(logits=False, input_range_type=1, pre_filter=lambda x:x, m_name='densenet'):
+def densenet_cifar10_model(logits=False, input_range_type=1, pre_filter=lambda x:x):
     assert input_range_type == 1
 
     batch_size = 64
@@ -79,15 +79,14 @@ def densenet_cifar10_model(logits=False, input_range_type=1, pre_filter=lambda x
     else:
         inputs = img_input
     # Create model.
-    print(" LOG:: Creating Model Name::", m_name)
-    model = Model(inputs, x, name=m_name)
+    model = Model(inputs, x, name='densenet')
     return model
 
 
 # Source: https://github.com/titu1994/DenseNet
 def __create_dense_net(nb_classes, img_input, input_shape, include_top, depth=40, nb_dense_block=3, growth_rate=12, nb_filter=-1,
                        nb_layers_per_block=-1, bottleneck=False, reduction=0.0, dropout_rate=None, weight_decay=1E-4,
-                       activation='softmax',pre_filter=lambda x:x, ):
+                       activation='softmax',pre_filter=lambda x:x):
     ''' Build the DenseNet model
     Args:
         nb_classes: number of classes

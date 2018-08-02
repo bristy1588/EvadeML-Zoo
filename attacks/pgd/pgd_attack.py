@@ -684,6 +684,175 @@ class CombinedLinfPGDAttackCIFAR10:
 
     return x_max
 
+
+class CombinedLinfPGDAttackDEBUG:
+  def __init__(self, model_vanilla, model1, model2, model3, epsilon, k, a, random_start, loss_func, Y,
+               sq1, sq2, sq3):
+    """Attack parameter initialization. The attack performs k steps of
+       size a, while always staying within epsilon from the initial
+       point.
+       This simulatenously runs the Combined Linf attack for 4 models
+       """
+    self.vanilla_model = model3
+    self.median_model = model2
+    self.bit_model = model1
+
+    self.LAMBDA = FLAGS.reg_lambda_x
+    print(" ----------- ^^^^^^^^^ ^_^ ^^^^^^^^ ------------- REG LAMBDA X:  ", self.LAMBDA)
+    print(" ----------- ^^^^^^^^^ ^_^ ^^^^^^^^ ------------- TOTAL REG LOSS:  ", FLAGS.tot_reg_loss)
+    self.k = k
+    self.a = a
+    self.Y = np.argmax(Y, axis=1)  # Target Labels
+    self.rand = random_start
+    self.epsilon = epsilon
+
+    self.sq_bit = sq1
+    self.sq_local = sq3
+
+
+    self.cur_x = tf.placeholder(tf.float32, shape=(None, FLAGS.image_size, FLAGS.image_size, 3))
+    self.p_op = tf.Print(self.cur_x, [self.cur_x], " Current Tensor Value:: ")
+    self.rc_bit  = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer=" + FLAGS.bit_depth_filter)
+    self.rc_median = FeatureSqueezingRC(self.vanilla_model.keras_model, "FeatureSqueezing?squeezer="+ FLAGS.median_filter)
+    self.rc_local = FeatureSqueezingRC(self.vanilla_model.keras_model,
+                                  "FeatureSqueezing?squeezer="+ FLAGS.non_local_filter)
+
+    self.check = tf.reduce_sum(1 - tf.to_float(tf.equal(self.bit_model.x_input, self.vanilla_model.x_input)))
+
+    self.x_diff_vanilla = self.cur_x - self.vanilla_model.x_input
+    self.x_reg_loss_vanilla = self.LAMBDA * tf.reduce_sum(tf.multiply(self.x_diff_vanilla, self.x_diff_vanilla))
+
+    self.x_diff_median = self.cur_x - self.median_model.x_input
+    self.x_reg_loss_median = self.LAMBDA * tf.reduce_sum(tf.multiply(self.x_diff_median, self.x_diff_median))
+
+    self.x_diff_bit = self.cur_x - self.bit_model.x_input
+    self.x_reg_loss_bit = self.LAMBDA * tf.reduce_sum(tf.multiply(self.x_diff_bit, self.x_diff_bit))
+
+    if loss_func != 'xent':
+      print('Unknown loss function. Defaulting to cross-entropy')
+
+    # (TODO:) Change this to be the difference between bit and vanilla
+
+    THRESHOLD = 1.2
+    self.vanilla_y_softmax = tf.nn.softmax(self.vanilla_model.pre_softmax)
+    self.bit_y_softmax = tf.nn.softmax(self.bit_model.pre_softmax)
+    self.t = self.vanilla_y_softmax - self.bit_y_softmax
+    self.diff_softmax = tf.nn.relu(tf.reduce_sum(tf.multiply(self.t, self.t), axis=1) - THRESHOLD)
+    self.reg_loss = FLAGS.tot_reg_loss * tf.reduce_sum(self.diff_softmax)
+
+    self.loss_vanilla = self.vanilla_model.xent + self.x_reg_loss_vanilla
+    self.loss_median = self.median_model.xent + self.x_reg_loss_median
+    self.loss_bit = self.bit_model.xent + 10 * self.x_reg_loss_bit
+
+    self.grad_vanilla = tf.gradients(self.loss_vanilla, self.vanilla_model.x_input)[0]
+    self.grad_median = tf.gradients(self.loss_median, self.median_model.x_input)[0]
+    self.grad_bit = tf.gradients(self.loss_bit, self.bit_model.x_input)[0]
+
+  def perturb(self, x_nat, y, sess):
+    """Given a set of examples (x_nat, y), returns a set of adversarial
+       examples within epsilon of x_nat in l_infinity norm."""
+    if self.rand:
+      x = x_nat + np.random.uniform(-self.epsilon, self.epsilon, x_nat.shape)
+    else:
+      x = np.copy(x_nat)
+
+    r_min = 100000.00
+    max_acc = 0
+    x_max = x
+    sel = 0
+
+    bit_depth_sq = get_squeezer_by_name(FLAGS.bit_depth_filter, "python")
+    non_local_sq = get_squeezer_by_name(FLAGS.non_local_filter, "python")
+
+    for i in range(self.k):
+      x_van = reduce_precision_py(x, 256)
+      x_bit = self.sq_bit(x_van)
+      x_local = self.sq_local(x_van)
+
+      vanilla_grad, vanilla_loss, y_vanilla, r_loss, \
+      check, bit_grad1, bit_loss1, y_bit1 = \
+                  sess.run([self.grad_vanilla, self.loss_vanilla,self.vanilla_model.y_pred,
+                            self.reg_loss, self.check, self.grad_bit, self.loss_bit,self.bit_model.y_pred],
+                           feed_dict={
+                              self.vanilla_model.x_input: x_van,
+                              self.vanilla_model.y_input: y,
+                              self.cur_x: x_nat,
+                              self.bit_model.x_input: x_bit,
+                              self.bit_model.y_input: y })
+
+      print("  =========================== Iteration =========================== : ", i)
+      print("******** Check Value:   ", check)
+      if np.array_equal(x_van, x_bit):
+          print("!!!!!!!!!!!!!!!!!!!!!!!!!! X_vanilla and X_bit are the same")
+      if check == 0 and not np.array_equal(x_van, x_bit):
+        print (" The same value is being passed to both vanilla and bit models")
+
+      bit_grad, bit_loss, y_bit = sess.run([self.grad_bit, self.loss_bit,self.bit_model.y_pred],
+                                           feed_dict={ self.cur_x: x_nat,
+                                                       self.bit_model.x_input: x_bit,
+                                                        self.bit_model.y_input: y })
+
+      if not np.array_equal(y_bit, y_bit1):
+          print(" -----------------------------------------------------------------")
+          print(" The two Bit predictions differ")
+          print(" From the combined    Model :", y_bit1)
+          print(" From the standalone  Model :", y_bit)
+          print(" From the vanilla Model: ", y_vanilla)
+          print(" -----------------------------------------------------------------")
+
+      median_grad, median_loss, y_median = sess.run([ self.grad_median, self.loss_median,
+                                                      self.median_model.y_pred ],
+                                          feed_dict = {self.cur_x: x_nat,
+                                                       self.median_model.x_input: x_van,
+                                                      self.median_model.y_input: y })
+
+      local_grad, local_loss, y_local = sess.run([self.grad_vanilla, self.loss_vanilla,
+                                                  self.vanilla_model.y_pred],
+                                                 feed_dict={self.vanilla_model.x_input: x_local,
+                                                            self.vanilla_model.y_input: y, self.cur_x : x_nat})
+
+      y_robust_median = np.argmax(self.rc_median.predict(x_van), axis=1)
+      y_robust_bit = np.argmax(self.rc_bit.predict(x_van), axis=1)
+      y_robust_local = np.argmax(self.rc_local.predict(x_van), axis = 1)
+
+
+
+      vanilla_acc = 1.0 - np.sum(y_vanilla == self.Y) / (float(len(self.Y)))
+      median_acc = 1.0 - np.sum(y_median == self.Y) / (float(len(self.Y)))
+      bit_acc = 1.0 - np.sum(y_bit == self.Y) / (float(len(self.Y)))
+      local_acc = 1.0 - np.sum(y_local == self.Y) / (float(len(self.Y)))
+
+      min_acc = min(vanilla_acc, median_acc, bit_acc, local_acc)
+      if (min_acc > max_acc):
+        max_acc = min_acc
+        x_max = np.copy(x)
+        sel = i
+
+      if (i > 15):
+          self.a = 0.01
+
+
+      tempilate = ('Vanilla: ({:.3f}%)   Median: ({:.3f}%)  Bit: ({:.3f}%) Non-local: ({:.3f}%) Reg Loss : ({:.3f}) ')
+      print(tempilate.format(vanilla_acc, median_acc, bit_acc, local_acc, r_loss))
+
+      if not np.array_equal(y_robust_median, y_median):
+          print("!!!!!!!! [ERROR!! --- M ----] Medians Disagree")
+      if not np.array_equal(y_robust_bit, y_bit):
+          print("!!!!!!!! [ERROR!! ---- B ----]Bit Depth Disagree")
+      if not np.array_equal(y_robust_local, y_local):
+          print("!!!!!!!! [ERROR!!------- L ------ ] Local Disagree")
+
+      grad = vanilla_grad + median_grad + bit_grad + local_grad
+      x += self.a * np.sign(grad)
+      x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
+      x = np.clip(x, 0, 1)
+
+    print("Selected Iteration:", sel)
+
+    return x_max
+
+
+
 if __name__ == '__main__':
   import json
   import sys

@@ -40,7 +40,7 @@ def maybe_generate_adv_examples(sess, model, x, y, X, Y, attack_name, attack_par
 
 
 
-def maybe_combined_generate_pgdli_examples(sess, vanilla_model, model1, model2, model3,  x, y, X, Y, attack_params,
+def maybe_combined_generate_pgdli_examples(sess, vanilla_model, model1, model2, model3,  x, y, x_bit, x_local, x_median, X, Y, attack_params,
                                            use_cache=False, verbose=True, attack_log_fpath=None, sq1=lambda x:x,
                                            sq2=lambda x:x, sq3=lambda x:x ):
     x_adv_fpath = use_cache
@@ -49,7 +49,7 @@ def maybe_combined_generate_pgdli_examples(sess, vanilla_model, model1, model2, 
         X_adv, duration = pickle.load(open(x_adv_fpath, "rb"))
     else:
         time_start = time.time()
-        X_adv = combined_generate_pgdli_examples(sess, vanilla_model, model1, model2, model3,  x, y, X, Y,
+        X_adv = combined_generate_pgdli_examples(sess, vanilla_model, model1, model2, model3,  x, y, x_bit, x_local, x_median, X, Y,
                                                  attack_params, sq1, sq2, sq3)
         duration = time.time() - time_start
 

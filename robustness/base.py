@@ -32,8 +32,7 @@ def get_robust_classifier_by_name(model, rc_name):
         raise Exception("Unknown robust classifier [%s]" % rc)
     return rc
 
-def evaluate_robustness(params_str, model, Y, X, Y_adv, attack_string_list, X_adv_list, fname_prefix, selected_idx_vis,
-                        result_folder):
+def evaluate_robustness(params_str, model, Y, X, Y_adv, attack_string_list, X_adv_list, fname_prefix, selected_idx_vis, result_folder):
     if not os.path.isdir(result_folder):
         os.makedirs(result_folder)
     robustness_string_hash = hashlib.sha1(params_str.encode('utf-8')).hexdigest()[:5]
@@ -83,4 +82,3 @@ def evaluate_robustness(params_str, model, Y, X, Y_adv, attack_string_list, X_ad
         writer.writeheader()
         for row in accuracy_rows:
             writer.writerow(row)
-

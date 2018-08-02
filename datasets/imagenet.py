@@ -50,7 +50,7 @@ def data_imagenet(img_folder, img_size, label_style = 'caffe', label_size = 1000
 class ImageNetDataset:
     def __init__(self):
         self.dataset_name = "ImageNet"
-        self.image_size = 224
+        #self.image_size = 224
         self.num_channels = 3
         self.num_classes = 1000
         self.img_folder = "/home/bristy/ILSVRC2012_img_val_labeled_caffe"
