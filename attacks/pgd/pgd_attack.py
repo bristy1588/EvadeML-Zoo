@@ -28,8 +28,6 @@ class CombinedLinfPGDAttack:
     self.model_median = model_median
     self.model_local = model_local
 
-    # (TODO) : Substitute these with Flags
-    # (TODO) : Add a regularizer
     THRESHOLD = FLAGS.threshold
     REG_LAMBDA = FLAGS.reg_lambda
 
@@ -117,8 +115,7 @@ class CombinedLinfPGDAttack:
       x = np.clip(x, 0, 1)  # ensure valid pixel range
       x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
 
-    x_max = np.clip(x_max, x_nat - self.epsilon, x_nat + self.epsilon)
-
+    print(" Selected Iteration:", sel)
     return x_max
 
 
@@ -693,7 +690,7 @@ class CombinedLinfPGDAttackCIFAR10:
       x = np.clip(x, 0, 1)
 
     print("Selected Iteration:", sel)
-
+    print (" Exiting PGDAttack ")
     return x_max
 
 class CombinedLinfPGDAttackDEBUG:

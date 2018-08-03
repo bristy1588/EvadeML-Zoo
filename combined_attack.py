@@ -29,7 +29,7 @@ flags.DEFINE_string('dataset_name', 'MNIST', 'Supported: MNIST, CIFAR-10, ImageN
 flags.DEFINE_string('model_name', 'cleverhans', 'Supported: cleverhans, cleverhans_adv_trained and carlini for MNIST; carlini and DenseNet for CIFAR-10;  ResNet50, VGG19, Inceptionv3 and MobileNet for ImageNet.')
 
 flags.DEFINE_boolean('select', True, 'Select correctly classified examples for the experiement.')
-flags.DEFINE_integer('nb_examples', 10, 'The number of examples selected for attacks.')
+flags.DEFINE_integer('nb_examples', 200, 'The number of examples selected for attacks.')
 flags.DEFINE_boolean('balance_sampling', False, 'Select the same number of examples for each class.')
 flags.DEFINE_boolean('test_mode', False, 'Only select one sample for each class.')
 
@@ -165,12 +165,14 @@ def main(argv=None):
                 selected_idx = [ correct_idx[i] for i in correct_and_selected_idx ]
     else:
         selected_idx = np.array(range(FLAGS.nb_examples))
-
+        print(" Okay, Selected idx len: ", len(selected_idx))
     from utils.output import format_number_range
     selected_example_idx_ranges = format_number_range(sorted(selected_idx))
     print ( "Selected %d examples." % len(selected_idx))
     print ( "Selected index in test set (sorted): %s" % selected_example_idx_ranges )
     X_test, Y_test, Y_pred = X_test_all[selected_idx], Y_test_all[selected_idx], Y_pred_all[selected_idx]
+    
+    print( " Shape of X_test: ", X_test.shape)
 
     # The accuracy should be 100%.
     accuracy_selected = calculate_accuracy(Y_pred, Y_test)
