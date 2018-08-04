@@ -36,7 +36,9 @@ def evaluate_robustness(params_str, model, Y, X, Y_adv, attack_string_list, X_ad
     if not os.path.isdir(result_folder):
         os.makedirs(result_folder)
     robustness_string_hash = hashlib.sha1(params_str.encode('utf-8')).hexdigest()[:5]
-    csv_fname = "%s_%s.csv" % (fname_prefix, robustness_string_hash)
+
+    # csv_fname = "%s_%s.csv" % (fname_prefix, robustness_string_hash)
+    csv_fname = "%s.csv" % (fname_prefix)
     csv_fpath = os.path.join(result_folder, csv_fname)
     print ("Saving robustness test results at %s" % csv_fpath)
 
@@ -72,8 +74,9 @@ def evaluate_robustness(params_str, model, Y, X, Y_adv, attack_string_list, X_ad
         accuracy_rows.append(accuracy_rec)
 
         # Visualize the filtered images.
-        if len(rows) > 1:
-            show_imgs_in_rows(rows, img_fpath)
+        # We are not going to Visualize
+        #if len(rows) > 1:
+            #imgs_in_rows(rows, img_fpath)
 
     # Output in a CSV file.
     import csv

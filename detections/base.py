@@ -85,6 +85,7 @@ class DetectionEvaluator:
 
         X_adv_all = np.concatenate(X_adv_list)
         X_leg_all = X[:len(X_adv_all)]
+        print(" ************** X_adv_all List:", X_adv_all.shape)
 
         self.X_detect = X_detect = np.concatenate([X_leg_all, X_adv_all])
         # TODO: this could be wrong in non-default data selection mode.
@@ -239,9 +240,13 @@ class DetectionEvaluator:
         detector_names = [ele.strip() for ele in params_str.split(';') if ele.strip()!= '']
 
         dataset_name = self.dataset_name
-        csv_fpath = "./detection_%s_saes.csv" % dataset_name
-        fieldnames = ['detector', 'threshold', 'fpr'] + self.attack_names + ['overall']
+        # csv_fpath =  "./detection_%s_saes.csv" % dataset_name
+        csv_fpath = self.csv_fpath
+        # Why have a CSV path if not use it?
+        fieldnames = ['accuracy',  'tpr',  'roc_auc', 'detector', 'threshold', 'fpr', ] + self.attack_names + ['overall']
         to_csv = []
+
+        print(" *************************CSV FilePath: ", csv_fpath)
 
         for detector_name in detector_names:
             detector = self.get_detector_by_name(detector_name)
@@ -260,11 +265,16 @@ class DetectionEvaluator:
 
             rec = {}
             rec['detector'] = detector_name
+            rec['accuracy'] = accuracy
+            rec['tpr'] = tpr
+            rec['fpr'] = fpr
+            rec['roc_auc'] = roc_auc
+
             if hasattr(detector, 'threshold'):
                 rec['threshold'] = detector.threshold
             else:
                 rec['threshold'] = None
-            rec['fpr'] = fpr
+
             overall_detection_rate_saes = 0
             nb_saes = 0
             for attack_name in self.attack_names:
@@ -274,6 +284,7 @@ class DetectionEvaluator:
                     X_sae, Y_sae = self.get_sae_testing_data(attack_name)
                 else:
                     X_sae, Y_sae = self.get_sae_data(attack_name)
+                print(" ***************** Shape of X_sae:", X_sae.shape)
                 Y_test_pred, Y_test_pred_score = detector.test(X_sae)
                 _, tpr, _, tp, ap = evalulate_detection_test(Y_sae, Y_test_pred)
                 print ("Detection rate on SAEs: %.4f \t %3d/%3d \t %s" % (tpr, tp, ap, attack_name))
@@ -309,8 +320,11 @@ class DetectionEvaluator:
                 X_fae, Y_fae = self.get_fae_testing_data()
             else:
                 X_fae, Y_fae = self.get_fae_data()
-            Y_test_pred, Y_test_pred_score = detector.test(X_fae)
-            _, tpr, _, tp, ap = evalulate_detection_test(Y_fae, Y_test_pred)
-            print ("Overall detection rate on FAEs: %.4f \t %3d/%3d" % (tpr, tp, ap))
+            if X_fae is not None:
+                Y_test_pred, Y_test_pred_score = detector.test(X_fae)
+                _, tpr, _, tp, ap = evalulate_detection_test(Y_fae, Y_test_pred)
+                print ("Overall detection rate on FAEs: %.4f \t %3d/%3d" % (tpr, tp, ap))
 
+        print(" Writing tooo CSV path: ", csv_fpath)
         write_to_csv(to_csv, csv_fpath, fieldnames)
+        print("    Finished Writing to CSV path: ", csv_fpath)

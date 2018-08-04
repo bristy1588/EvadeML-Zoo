@@ -344,6 +344,7 @@ def main(argv=None):
         result_folder_detection = os.path.join(FLAGS.result_folder, "detection")
         csv_fname = "%s_attacks_%s_detection.csv" % (task_id, attack_string_hash)
         de = DetectionEvaluator(model_vanilla, result_folder_detection, csv_fname, FLAGS.dataset_name)
+        print(" ***************** Just before passing into Detection:", X_test_adv_discretized_list[0].shape)
         Y_test_all_pred = model_vanilla.predict(X_test_all)
         de.build_detection_dataset(X_test_all, Y_test_all, Y_test_all_pred, selected_idx,
                                    X_test_adv_discretized_list, Y_test_adv_discretized_pred_list,
