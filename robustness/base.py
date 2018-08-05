@@ -22,6 +22,7 @@ from .feature_squeezing import FeatureSqueezingRC
 from .magnet import MagNetRC
 
 def get_robust_classifier_by_name(model, rc_name):
+    print(" !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Current RC Name:", rc_name)
     if rc_name.startswith('Base') or rc_name.startswith('none'):
         rc = RobustClassifierBase(model, rc_name)
     elif rc_name.startswith("FeatureSqueezing"):
