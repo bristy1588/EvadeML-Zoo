@@ -56,8 +56,10 @@ class CombinedLinfPGDAttack:
     diff_median = tf.nn.relu(tf.reduce_sum(tf.multiply(median_t, median_t), axis=1) -  THRESHOLD)
     diff_local = tf.nn.relu(tf.reduce_sum(tf.multiply(local_t, local_t), axis=1) - THRESHOLD)
 
-    self.reg_loss = REG_LAMBDA * (tf.reduce_sum(diff_bit) + tf.reduce_sum(diff_median) + tf.reduce_sum(diff_local))
-    self.loss = self.model_bit.xent + self.model_median.xent + self.model_local.xent - self.reg_loss
+    # With the maximum version instead of summing.
+    self.reg_loss_1 = tf.maximum(tf.reduce_sum(diff_bit),tf.reduce_sum(diff_median))
+    self.reg_loss = tf.maximum(self.reg_loss_1, tf.reduce_sum(diff_local))
+    self.loss = self.model_bit.xent + self.model_median.xent + self.model_local.xent - REG_LAMBDA * self.reg_loss
 
     if loss_func != 'xent':
       print('Unknown loss function. Defaulting to cross-entropy')
