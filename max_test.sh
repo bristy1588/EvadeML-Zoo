@@ -13,12 +13,12 @@ FeatureSqueezing?squeezers=non_local_means_color_13_3_4&distance_measure=l1&fpr=
 FeatureSqueezing?squeezers=bit_depth_5,median_filter_2_2,non_local_means_color_13_3_2&distance_measure=l1&fpr=0.05;"'
 
 COMMON_CIFAR='python break.py --dataset_name CIFAR-10 --model_name DenseNet \
---bit_depth_filter "bit_depth_5" --median_filter "median_filter_2_2" --non_local_filter "non_local_means_color_13_3_2" \
+--bit_depth_filter bit_depth_5 --median_filter median_filter_2_2 --non_local_filter non_local_means_color_13_3_2 \
 --nb_examples 200 --robustness "none;FeatureSqueezing?squeezer=median_filter_2_2;FeatureSqueezing?squeezer=bit_depth_5;\
 FeatureSqueezing?squeezer=non_local_means_color_13_3_2"'
 
 COMMON_IMAGENET='python break.py --dataset_name ImageNet --model_name MobileNet \
---bit_depth_filter "bit_depth_5" --median_filter "median_filter_2_2" --non_local_filter "non_local_means_color_11_3_4" \
+--bit_depth_filter bit_depth_5 --median_filter median_filter_2_2 --non_local_filter non_local_means_color_11_3_4 \
 --nb_examples 200 --robustness "none;FeatureSqueezing?squeezer=median_filter_2_2;FeatureSqueezing?squeezer=bit_depth_5;\
 FeatureSqueezing?squeezer=non_local_means_color_11_3_4"'
 
