@@ -1,6 +1,6 @@
 
 import warnings
-from .pgd_attack import CombinedLinfPGDAttackImageNet, CombinedLinfPGDAttackCIFAR10, LinfPGDAttack, CombinedLinfPGDAttack
+from .pgd_attack import LinfPGDAttack, CombinedLinfPGDAttack, EOTLinfPGDAttack
 from .pgd_attack import CombinedLinfPGDAttackDEBUG
 from keras.models import Model
 import tensorflow as tf
@@ -98,6 +98,23 @@ def combined_adversarial_attack(sess, model_vanilla, model_bit, model_median, mo
 
     params = override_params(params, attack_params)
     attack = CombinedLinfPGDAttack(**params)
+    Y_class = np.argmax(Y, 1)
+    X_adv = attack.perturb(X, Y_class, sess)
+    return X_adv
+
+def eot_adversarial_attack(sess, model_vanilla, models, x, y, x_s,  X, Y, attack_params, squeezers):
+    other_models = []
+    for (x_cur, model_cur) in zip(x_s, models):
+        model_cur = PGDModelWrapper(model_cur, x_cur, y)
+        other_models.append(model_cur)
+
+    model_vanilla_pgd = PGDModelWrapper(model_vanilla, x, y)
+
+    params = {'model_vanilla': model_vanilla_pgd, 'other_models': other_models, 'epsilon': 0.3, 'k': 20,
+              'a': 0.01, 'random_start': True, 'loss_func': 'xent', 'squeezers': squeezers, 'Y': Y}
+
+    params = override_params(params, attack_params)
+    attack = EOTLinfPGDAttack(**params)
     Y_class = np.argmax(Y, 1)
     X_adv = attack.perturb(X, Y_class, sess)
     return X_adv

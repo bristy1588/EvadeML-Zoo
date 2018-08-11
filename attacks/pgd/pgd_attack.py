@@ -18,6 +18,107 @@ from robustness.feature_squeezing import FeatureSqueezingRC
 
 l2_dist = lambda x1,x2: np.sum((x1-x2)**2, axis=tuple(range(len(x1.shape))[1:]))
 
+class EOTLinfPGDAttack:
+
+  def __init__(self, model_vanilla, other_models, epsilon, k, a, random_start, loss_func, squeezers, Y):
+
+    self.model_vanilla = model_vanilla
+    self.other_models = other_models
+    self.squeezers = squeezers
+
+    THRESHOLD = FLAGS.threshold
+    REG_LAMBDA = FLAGS.reg_lambda
+
+    print("Threshold: %.3f  Regularization: %.3f" % (THRESHOLD, REG_LAMBDA))
+
+    self.epsilon = epsilon
+    self.k = k
+    self.a = a
+    self.Y = np.argmax(Y, axis=1)  # Target Labels
+    self.rand = random_start
+
+    vanilla_softmax = tf.nn.softmax(self.model_vanilla.pre_softmax)
+    reg_losses = []
+    xent_losses = []
+    for model in other_models:
+      t = tf.nn.softmax(model.pre_softmax) - vanilla_softmax
+      reg_loss = tf.nn.relu(tf.reduce_sum(tf.multiply(t, t), axis=1) - THRESHOLD)
+      reg_losses.append(reg_loss)
+      xent_losses.append(model.xent)
+
+    self.reg_loss = tf.reduce_sum(tf.convert_to_tensor(reg_losses))
+    self.loss = tf.reduce_sum(tf.convert_to_tensor(xent_losses)) - REG_LAMBDA * self.reg_loss
+
+    if loss_func != 'xent':
+      print('Unknown loss function. Defaulting to cross-entropy')
+
+    grads = []
+    for model in other_models:
+      grads.append(tf.gradients(self.loss, model.x_input)[0])
+
+    self.grad = tf.reduce_sum(tf.convert_to_tensor(grads), axis = 0)
+
+
+  def perturb(self, x_nat, y, sess):
+    """Given a set of examples (x_nat, y), returns a set of adversarial
+       examples within epsilon of x_nat in l_infinity norm."""
+    if self.rand:
+      x = x_nat + np.random.uniform(-self.epsilon, self.epsilon, x_nat.shape)
+    else:
+      x = np.copy(x_nat)
+
+    r_min = 100000.00
+    max_acc = 0
+    x_max = x
+    sel = 0
+
+    for i in range(self.k):
+      # Performing BPDA and EOT here
+      x_van = reduce_precision_py(x, 256)
+
+      feed_dict = {self.model_vanilla.x_input: x_van, self.model_vanilla.y_input: y}
+      to_run = [self.grad, self.loss, self.reg_loss, self.model_vanilla.y_pred]
+
+      for (model, sq) in zip (self.other_models, self.squeezers):
+        feed_dict[model.x_input] = sq(x_van)
+        feed_dict[model.y_input] = y
+        to_run.append(model.y_pred)
+
+
+      outputs = sess.run(to_run, feed_dict= feed_dict)
+      grad = outputs[0]
+      loss = outputs[1]
+      reg_loss = outputs[2]
+      y_vanilla = outputs[3]
+
+      vanilla_accuracy = 1 - np.sum(y_vanilla == self.Y) / (float(len(self.Y)))
+
+      print("======  Itr: ", i, " Loss: ", loss, " Reg Loss: ", reg_loss)
+      output_template = ('Vanilla : ({:.3f}%)  ')
+      print(output_template.format(vanilla_accuracy))
+      min_accuracy = vanilla_accuracy
+
+      for (i, sq) in enumerate(self.squeezers):
+        y_cur = outputs[ 4 + i]
+        accuracy =  1 - np.sum(y_cur == self.Y) / (float(len(self.Y)))
+        min_accuracy = min(accuracy, min_accuracy)
+        output_template = (' ({:.3f}%)  ')
+        print(output_template.format(accuracy))
+
+      if min_accuracy > max_acc or (min_accuracy >= max_acc and reg_loss < r_min):
+        max_acc = min_accuracy
+        x_max = np.copy(x)
+        sel = i
+        r_min = reg_loss
+
+      x += self.a * np.sign(grad)
+      x = np.clip(x, 0, 1)  # ensure valid pixel range
+      x = np.clip(x, x_nat - self.epsilon, x_nat + self.epsilon)
+
+    print(" Selected Iteration:", sel)
+    return x_max
+
+
 # Debugged Implementations (hopefully)
 class CombinedLinfPGDAttack:
   def __init__(self, model_vanilla, model_bit, model_median, model_local, epsilon, k, a, random_start, loss_func, Y,
